@@ -257,7 +257,7 @@ function shouldSkipFile(path) {
         return true;
     }
 
-    // Skip new mob textures if option is disabled
+    // Only skip specific new mob textures if option is disabled
     if (!state.options.convertNewMobs && pathLower.includes('entity/')) {
         const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer'];
         for (const mob of newMobs) {
@@ -266,6 +266,7 @@ function shouldSkipFile(path) {
             }
         }
     }
+    // Entity textures are preserved by default (chests, signs, end portal frames, etc.)
 
     return false;
 }
@@ -274,10 +275,11 @@ function modifyPackMcmeta(content) {
     try {
         const data = JSON.parse(content);
         
-        // Update description
-        data.pack.description = state.options.packName 
-            ? `${state.options.packName} - Tuff Client Edition`
-            : "Just like the trailers!";
+        // Only update description if custom pack name is provided
+        if (state.options.packName) {
+            data.pack.description = `${state.options.packName} - Tuff Client Edition`;
+        }
+        // Otherwise keep the original description from the 1.21 pack
         
         // Ensure pack format is 3 (1.11-1.12.x)
         data.pack.pack_format = 3;
