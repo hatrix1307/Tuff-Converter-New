@@ -189,12 +189,17 @@ async function convertPack() {
                 continue;
             }
 
-            // Check if this file needs to be renamed for compatibility
-            const renamedPath = renameTextureForCompatibility(path);
-
-            // Copy file to output
+            // Get file content once
             const content = await file.async('blob');
-            outputZip.file(renamedPath, content);
+
+            // Add the original file
+            outputZip.file(path, content);
+
+            // Check if we need to create duplicate files with legacy names
+            const duplicates = getDuplicateFilesNeeded(path);
+            for (const duplicatePath of duplicates) {
+                outputZip.file(duplicatePath, content);
+            }
         }
 
         updateProgress(80, 'Finalizing conversion...');
@@ -273,6 +278,43 @@ function shouldSkipFile(path) {
     return false;
 }
 
+function getDuplicateFilesNeeded(path) {
+    const pathLower = path.toLowerCase();
+    const duplicates = [];
+    
+    // Grass block textures - create legacy versions alongside new ones
+    if (pathLower.includes('/block/grass_block_side_overlay.png')) {
+        duplicates.push(path.replace(/grass_block_side_overlay\.png/i, 'grass_side_overlay.png'));
+    }
+    if (pathLower.includes('/block/grass_block_side.png')) {
+        duplicates.push(path.replace(/grass_block_side\.png/i, 'grass_side.png'));
+    }
+    if (pathLower.includes('/block/grass_block_top.png')) {
+        duplicates.push(path.replace(/grass_block_top\.png/i, 'grass_top.png'));
+    }
+    if (pathLower.includes('/block/grass_block_snow.png')) {
+        duplicates.push(path.replace(/grass_block_snow\.png/i, 'grass_side_snowed.png'));
+    }
+    
+    // Farmland textures - create all variants
+    if (pathLower.includes('/block/farmland.png')) {
+        duplicates.push(path.replace(/farmland\.png/i, 'farmland_dry.png'));
+    }
+    if (pathLower.includes('/block/farmland_moist.png')) {
+        duplicates.push(path.replace(/farmland_moist\.png/i, 'farmland_wet.png'));
+    }
+    
+    // Grass path (also known as dirt path in newer versions)
+    if (pathLower.includes('/block/dirt_path_top.png')) {
+        duplicates.push(path.replace(/dirt_path_top\.png/i, 'grass_path_top.png'));
+    }
+    if (pathLower.includes('/block/dirt_path_side.png')) {
+        duplicates.push(path.replace(/dirt_path_side\.png/i, 'grass_path_side.png'));
+    }
+    
+    return duplicates;
+}
+
 function modifyPackMcmeta(content) {
     try {
         const data = JSON.parse(content);
@@ -291,29 +333,6 @@ function modifyPackMcmeta(content) {
         console.error('Error modifying pack.mcmeta:', error);
         return content;
     }
-}
-
-function renameTextureForCompatibility(path) {
-    const pathLower = path.toLowerCase();
-    
-    // Grass block textures - 1.21 uses grass_block_* but 1.12 uses grass_*
-    if (pathLower.includes('grass_block_side_overlay.png')) {
-        return path.replace(/grass_block_side_overlay\.png/i, 'grass_side_overlay.png');
-    }
-    if (pathLower.includes('grass_block_side.png')) {
-        return path.replace(/grass_block_side\.png/i, 'grass_side.png');
-    }
-    if (pathLower.includes('grass_block_top.png')) {
-        return path.replace(/grass_block_top\.png/i, 'grass_top.png');
-    }
-    
-    // Farmland textures - 1.21 might use different names
-    if (pathLower.includes('farmland_moist.png')) {
-        return path.replace(/farmland_moist\.png/i, 'farmland_wet.png');
-    }
-    
-    // Return original path if no rename needed
-    return path;
 }
 
 function updateProgress(percent, message) {
