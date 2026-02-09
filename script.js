@@ -189,9 +189,12 @@ async function convertPack() {
                 continue;
             }
 
+            // Check if this file needs to be renamed for compatibility
+            const renamedPath = renameTextureForCompatibility(path);
+
             // Copy file to output
             const content = await file.async('blob');
-            outputZip.file(path, content);
+            outputZip.file(renamedPath, content);
         }
 
         updateProgress(80, 'Finalizing conversion...');
@@ -288,6 +291,29 @@ function modifyPackMcmeta(content) {
         console.error('Error modifying pack.mcmeta:', error);
         return content;
     }
+}
+
+function renameTextureForCompatibility(path) {
+    const pathLower = path.toLowerCase();
+    
+    // Grass block textures - 1.21 uses grass_block_* but 1.12 uses grass_*
+    if (pathLower.includes('grass_block_side_overlay.png')) {
+        return path.replace(/grass_block_side_overlay\.png/i, 'grass_side_overlay.png');
+    }
+    if (pathLower.includes('grass_block_side.png')) {
+        return path.replace(/grass_block_side\.png/i, 'grass_side.png');
+    }
+    if (pathLower.includes('grass_block_top.png')) {
+        return path.replace(/grass_block_top\.png/i, 'grass_top.png');
+    }
+    
+    // Farmland textures - 1.21 might use different names
+    if (pathLower.includes('farmland_moist.png')) {
+        return path.replace(/farmland_moist\.png/i, 'farmland_wet.png');
+    }
+    
+    // Return original path if no rename needed
+    return path;
 }
 
 function updateProgress(percent, message) {
