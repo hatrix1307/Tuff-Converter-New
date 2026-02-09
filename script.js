@@ -189,17 +189,14 @@ async function convertPack() {
                 continue;
             }
 
-            // Get file content once
+            // Get file content
             const content = await file.async('blob');
 
             // Add the original file
             outputZip.file(path, content);
 
-            // Check if we need to create duplicate files with legacy names
-            const duplicates = getDuplicateFilesNeeded(path);
-            for (const duplicatePath of duplicates) {
-                outputZip.file(duplicatePath, content);
-            }
+            // Create legacy duplicates for compatibility
+            await createLegacyDuplicates(outputZip, path, content);
         }
 
         updateProgress(80, 'Finalizing conversion...');
@@ -273,192 +270,192 @@ function shouldSkipFile(path) {
             }
         }
     }
-    // Entity textures are preserved by default (chests, signs, end portal frames, etc.)
 
     return false;
 }
 
-function getDuplicateFilesNeeded(path) {
-    const pathLower = path.toLowerCase();
-    const duplicates = [];
+async function createLegacyDuplicates(outputZip, originalPath, content) {
+    const path = originalPath.toLowerCase();
     
-    // === GRASS BLOCKS ===
-    if (pathLower.includes('/block/grass_block_side_overlay.png')) {
-        duplicates.push(path.replace(/grass_block_side_overlay\.png/i, 'grass_side_overlay.png'));
-    }
-    if (pathLower.includes('/block/grass_block_side.png')) {
-        duplicates.push(path.replace(/grass_block_side\.png/i, 'grass_side.png'));
-    }
-    if (pathLower.includes('/block/grass_block_top.png')) {
-        duplicates.push(path.replace(/grass_block_top\.png/i, 'grass_top.png'));
-    }
-    if (pathLower.includes('/block/grass_block_snow.png')) {
-        duplicates.push(path.replace(/grass_block_snow\.png/i, 'grass_side_snowed.png'));
-    }
+    // Helper function to add duplicate
+    const addDuplicate = (newPath) => {
+        outputZip.file(newPath, content);
+    };
     
-    // === FARMLAND ===
-    if (pathLower.includes('/block/farmland.png')) {
-        duplicates.push(path.replace(/farmland\.png/i, 'farmland_dry.png'));
+    // GRASS BLOCKS
+    if (path.endsWith('/block/grass_block_side_overlay.png')) {
+        addDuplicate(originalPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'));
     }
-    if (pathLower.includes('/block/farmland_moist.png')) {
-        duplicates.push(path.replace(/farmland_moist\.png/i, 'farmland_wet.png'));
+    if (path.endsWith('/block/grass_block_side.png')) {
+        addDuplicate(originalPath.replace(/grass_block_side\.png$/i, 'grass_side.png'));
+    }
+    if (path.endsWith('/block/grass_block_top.png')) {
+        addDuplicate(originalPath.replace(/grass_block_top\.png$/i, 'grass_top.png'));
+    }
+    if (path.endsWith('/block/grass_block_snow.png')) {
+        addDuplicate(originalPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'));
     }
     
-    // === GRASS PATH ===
-    if (pathLower.includes('/block/dirt_path_top.png')) {
-        duplicates.push(path.replace(/dirt_path_top\.png/i, 'grass_path_top.png'));
+    // FARMLAND
+    if (path.endsWith('/block/farmland.png')) {
+        addDuplicate(originalPath.replace(/farmland\.png$/i, 'farmland_dry.png'));
     }
-    if (pathLower.includes('/block/dirt_path_side.png')) {
-        duplicates.push(path.replace(/dirt_path_side\.png/i, 'grass_path_side.png'));
-    }
-    
-    // === WOOD TOOLS (wooden_ to wood_) ===
-    if (pathLower.includes('/item/wooden_sword.png')) {
-        duplicates.push(path.replace(/wooden_sword\.png/i, 'wood_sword.png'));
-    }
-    if (pathLower.includes('/item/wooden_pickaxe.png')) {
-        duplicates.push(path.replace(/wooden_pickaxe\.png/i, 'wood_pickaxe.png'));
-    }
-    if (pathLower.includes('/item/wooden_axe.png')) {
-        duplicates.push(path.replace(/wooden_axe\.png/i, 'wood_axe.png'));
-    }
-    if (pathLower.includes('/item/wooden_shovel.png')) {
-        duplicates.push(path.replace(/wooden_shovel\.png/i, 'wood_shovel.png'));
-    }
-    if (pathLower.includes('/item/wooden_hoe.png')) {
-        duplicates.push(path.replace(/wooden_hoe\.png/i, 'wood_hoe.png'));
+    if (path.endsWith('/block/farmland_moist.png')) {
+        addDuplicate(originalPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'));
     }
     
-    // === GOLD TOOLS & ARMOR (golden_ to gold_) ===
-    if (pathLower.includes('/item/golden_sword.png')) {
-        duplicates.push(path.replace(/golden_sword\.png/i, 'gold_sword.png'));
+    // GRASS PATH
+    if (path.endsWith('/block/dirt_path_top.png')) {
+        addDuplicate(originalPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'));
     }
-    if (pathLower.includes('/item/golden_pickaxe.png')) {
-        duplicates.push(path.replace(/golden_pickaxe\.png/i, 'gold_pickaxe.png'));
-    }
-    if (pathLower.includes('/item/golden_axe.png')) {
-        duplicates.push(path.replace(/golden_axe\.png/i, 'gold_axe.png'));
-    }
-    if (pathLower.includes('/item/golden_shovel.png')) {
-        duplicates.push(path.replace(/golden_shovel\.png/i, 'gold_shovel.png'));
-    }
-    if (pathLower.includes('/item/golden_hoe.png')) {
-        duplicates.push(path.replace(/golden_hoe\.png/i, 'gold_hoe.png'));
-    }
-    if (pathLower.includes('/item/golden_helmet.png')) {
-        duplicates.push(path.replace(/golden_helmet\.png/i, 'gold_helmet.png'));
-    }
-    if (pathLower.includes('/item/golden_chestplate.png')) {
-        duplicates.push(path.replace(/golden_chestplate\.png/i, 'gold_chestplate.png'));
-    }
-    if (pathLower.includes('/item/golden_leggings.png')) {
-        duplicates.push(path.replace(/golden_leggings\.png/i, 'gold_leggings.png'));
-    }
-    if (pathLower.includes('/item/golden_boots.png')) {
-        duplicates.push(path.replace(/golden_boots\.png/i, 'gold_boots.png'));
-    }
-    if (pathLower.includes('/item/golden_apple.png')) {
-        duplicates.push(path.replace(/golden_apple\.png/i, 'apple_golden.png'));
+    if (path.endsWith('/block/dirt_path_side.png')) {
+        addDuplicate(originalPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'));
     }
     
-    // === DYES (color_dye to dye_color) ===
+    // WOOD TOOLS
+    if (path.endsWith('/item/wooden_sword.png')) {
+        addDuplicate(originalPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'));
+    }
+    if (path.endsWith('/item/wooden_pickaxe.png')) {
+        addDuplicate(originalPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'));
+    }
+    if (path.endsWith('/item/wooden_axe.png')) {
+        addDuplicate(originalPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'));
+    }
+    if (path.endsWith('/item/wooden_shovel.png')) {
+        addDuplicate(originalPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'));
+    }
+    if (path.endsWith('/item/wooden_hoe.png')) {
+        addDuplicate(originalPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'));
+    }
+    
+    // GOLD TOOLS & ARMOR
+    if (path.endsWith('/item/golden_sword.png')) {
+        addDuplicate(originalPath.replace(/golden_sword\.png$/i, 'gold_sword.png'));
+    }
+    if (path.endsWith('/item/golden_pickaxe.png')) {
+        addDuplicate(originalPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'));
+    }
+    if (path.endsWith('/item/golden_axe.png')) {
+        addDuplicate(originalPath.replace(/golden_axe\.png$/i, 'gold_axe.png'));
+    }
+    if (path.endsWith('/item/golden_shovel.png')) {
+        addDuplicate(originalPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'));
+    }
+    if (path.endsWith('/item/golden_hoe.png')) {
+        addDuplicate(originalPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'));
+    }
+    if (path.endsWith('/item/golden_helmet.png')) {
+        addDuplicate(originalPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'));
+    }
+    if (path.endsWith('/item/golden_chestplate.png')) {
+        addDuplicate(originalPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'));
+    }
+    if (path.endsWith('/item/golden_leggings.png')) {
+        addDuplicate(originalPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'));
+    }
+    if (path.endsWith('/item/golden_boots.png')) {
+        addDuplicate(originalPath.replace(/golden_boots\.png$/i, 'gold_boots.png'));
+    }
+    if (path.endsWith('/item/golden_apple.png')) {
+        addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
+    }
+    
+    // DYES
     const dyeColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 
                        'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
     for (const color of dyeColors) {
-        if (pathLower.includes(`/item/${color}_dye.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_dye\\.png`, 'i'), `dye_${color}.png`));
+        if (path.endsWith(`/item/${color}_dye.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_dye\\.png$`, 'i'), `dye_${color}.png`));
         }
     }
     
-    // === GLASS & GLASS PANES (color_stained to stained_color) ===
+    // GLASS & GLASS PANES
     const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                          'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
     for (const color of glassColors) {
-        if (pathLower.includes(`/block/${color}_stained_glass.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_stained_glass\\.png`, 'i'), `glass_${color}.png`));
+        if (path.endsWith(`/block/${color}_stained_glass.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass\\.png$`, 'i'), `glass_${color}.png`));
         }
-        if (pathLower.includes(`/block/${color}_stained_glass_pane_top.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_stained_glass_pane_top\\.png`, 'i'), `glass_pane_top_${color}.png`));
+        if (path.endsWith(`/block/${color}_stained_glass_pane_top.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass_pane_top\\.png$`, 'i'), `glass_pane_top_${color}.png`));
         }
     }
     
-    // === WOOL (color_wool to wool_colored_color) ===
+    // WOOL
     const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
     for (const color of woolColors) {
-        if (pathLower.includes(`/block/${color}_wool.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_wool\\.png`, 'i'), `wool_colored_${color}.png`));
+        if (path.endsWith(`/block/${color}_wool.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_wool\\.png$`, 'i'), `wool_colored_${color}.png`));
         }
     }
     
-    // === TERRACOTTA (color_terracotta to hardened_clay_stained_color) ===
+    // TERRACOTTA
     const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                               'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
     for (const color of terracottaColors) {
-        if (pathLower.includes(`/block/${color}_terracotta.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_terracotta\\.png`, 'i'), `hardened_clay_stained_${color}.png`));
+        if (path.endsWith(`/block/${color}_terracotta.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_terracotta\\.png$`, 'i'), `hardened_clay_stained_${color}.png`));
         }
     }
     
-    // Uncolored terracotta
-    if (pathLower.includes('/block/terracotta.png')) {
-        duplicates.push(path.replace(/terracotta\.png/i, 'hardened_clay.png'));
+    if (path.endsWith('/block/terracotta.png')) {
+        addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
     }
     
-    // === GLAZED TERRACOTTA (color_glazed_terracotta to glazed_terracotta_color) ===
+    // GLAZED TERRACOTTA
     const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                           'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
     for (const color of glazedColors) {
-        if (pathLower.includes(`/block/${color}_glazed_terracotta.png`)) {
-            duplicates.push(path.replace(new RegExp(`${color}_glazed_terracotta\\.png`, 'i'), `glazed_terracotta_${color}.png`));
+        if (path.endsWith(`/block/${color}_glazed_terracotta.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_glazed_terracotta\\.png$`, 'i'), `glazed_terracotta_${color}.png`));
         }
     }
     
-    // === LOGS (oak_log to log_oak) ===
+    // LOGS
     const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of logTypes) {
-        if (pathLower.includes(`/block/${wood}_log.png`)) {
+        if (path.endsWith(`/block/${wood}_log.png`)) {
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            duplicates.push(path.replace(new RegExp(`${wood}_log\\.png`, 'i'), `log_${legacyName}.png`));
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_log\\.png$`, 'i'), `log_${legacyName}.png`));
         }
-        if (pathLower.includes(`/block/${wood}_log_top.png`)) {
+        if (path.endsWith(`/block/${wood}_log_top.png`)) {
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            duplicates.push(path.replace(new RegExp(`${wood}_log_top\\.png`, 'i'), `log_${legacyName}_top.png`));
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_log_top\\.png$`, 'i'), `log_${legacyName}_top.png`));
         }
     }
     
-    // === PLANKS (oak_planks to planks_oak) ===
+    // PLANKS
     const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of plankTypes) {
-        if (pathLower.includes(`/block/${wood}_planks.png`)) {
+        if (path.endsWith(`/block/${wood}_planks.png`)) {
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            duplicates.push(path.replace(new RegExp(`${wood}_planks\\.png`, 'i'), `planks_${legacyName}.png`));
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_planks\\.png$`, 'i'), `planks_${legacyName}.png`));
         }
     }
     
-    // === NETHER QUARTZ ===
-    if (pathLower.includes('/block/nether_quartz_ore.png')) {
-        duplicates.push(path.replace(/nether_quartz_ore\.png/i, 'quartz_ore.png'));
+    // NETHER QUARTZ
+    if (path.endsWith('/block/nether_quartz_ore.png')) {
+        addDuplicate(originalPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'));
     }
     
-    // === RED NETHER BRICK ===
-    if (pathLower.includes('/block/red_nether_bricks.png')) {
-        duplicates.push(path.replace(/red_nether_bricks\.png/i, 'red_nether_brick.png'));
+    // RED NETHER BRICK
+    if (path.endsWith('/block/red_nether_bricks.png')) {
+        addDuplicate(originalPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'));
     }
     
-    // === TOTEM ===
-    if (pathLower.includes('/item/totem_of_undying.png')) {
-        duplicates.push(path.replace(/totem_of_undying\.png/i, 'totem.png'));
+    // TOTEM
+    if (path.endsWith('/item/totem_of_undying.png')) {
+        addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
     }
-    
-    return duplicates;
 }
 
 function modifyPackMcmeta(content) {
@@ -469,7 +466,6 @@ function modifyPackMcmeta(content) {
         if (state.options.packName) {
             data.pack.description = `${state.options.packName} - Tuff Client Edition`;
         }
-        // Otherwise keep the original description from the 1.21 pack
         
         // Ensure pack format is 3 (1.11-1.12.x)
         data.pack.pack_format = 3;
