@@ -192,10 +192,10 @@ async function convertPack() {
             // Get file content
             const content = await file.async('blob');
 
-            // Add the original file
+            // Add the original file (keeps modern compatibility if needed)
             outputZip.file(path, content);
 
-            // Create legacy duplicates for compatibility
+            // Create legacy duplicates (fixes folder names and renames files)
             await createLegacyDuplicates(outputZip, path, content);
         }
 
@@ -242,6 +242,7 @@ function shouldSkipFile(path) {
     // Skip files in folders to remove
     if (state.options.removeNonTextures) {
         for (const folder of FOLDERS_TO_REMOVE) {
+            // Check for both forward and backslashes
             if (pathLower.includes(`/${folder}/`) || pathLower.includes(`\\${folder}\\`)) {
                 return true;
             }
@@ -275,187 +276,186 @@ function shouldSkipFile(path) {
 }
 
 async function createLegacyDuplicates(outputZip, originalPath, content) {
-    const path = originalPath.toLowerCase();
+    // We strictly only care about textures in 'block' and 'item'
+    // because Tuff Client (Legacy) requires 'blocks' and 'items'.
+    const pathLower = originalPath.toLowerCase();
     
-    // Helper function to add duplicate
-    const addDuplicate = (newPath) => {
-        outputZip.file(newPath, content);
-    };
+    // Check if this is a block or item texture
+    const isBlock = pathLower.includes('/textures/block/');
+    const isItem = pathLower.includes('/textures/item/');
+
+    if (!isBlock && !isItem) return;
+
+    // 1. FIX FOLDER STRUCTURE (Singular -> Plural)
+    // Replace /block/ with /blocks/ and /item/ with /items/
+    let legacyPath = originalPath
+        .replace(/\/textures\/block\//g, '/textures/blocks/')
+        .replace(/\/textures\/item\//g, '/textures/items/');
+
+    // 2. APPLY FILENAME MAPPINGS
+    // We modify 'legacyPath' based on renaming rules
     
-    // GRASS BLOCKS
-    if (path.endsWith('/block/grass_block_side_overlay.png')) {
-        addDuplicate(originalPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'));
-    }
-    if (path.endsWith('/block/grass_block_side.png')) {
-        addDuplicate(originalPath.replace(/grass_block_side\.png$/i, 'grass_side.png'));
-    }
-    if (path.endsWith('/block/grass_block_top.png')) {
-        addDuplicate(originalPath.replace(/grass_block_top\.png$/i, 'grass_top.png'));
-    }
-    if (path.endsWith('/block/grass_block_snow.png')) {
-        addDuplicate(originalPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'));
-    }
-    
-    // FARMLAND
-    if (path.endsWith('/block/farmland.png')) {
-        addDuplicate(originalPath.replace(/farmland\.png$/i, 'farmland_dry.png'));
-    }
-    if (path.endsWith('/block/farmland_moist.png')) {
-        addDuplicate(originalPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'));
-    }
-    
-    // GRASS PATH
-    if (path.endsWith('/block/dirt_path_top.png')) {
-        addDuplicate(originalPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'));
-    }
-    if (path.endsWith('/block/dirt_path_side.png')) {
-        addDuplicate(originalPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'));
+    let renamed = false;
+
+    // --- GRASS BLOCKS ---
+    if (pathLower.endsWith('grass_block_side_overlay.png')) {
+        legacyPath = legacyPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'); renamed = true;
+    } else if (pathLower.endsWith('grass_block_side.png')) {
+        legacyPath = legacyPath.replace(/grass_block_side\.png$/i, 'grass_side.png'); renamed = true;
+    } else if (pathLower.endsWith('grass_block_top.png')) {
+        legacyPath = legacyPath.replace(/grass_block_top\.png$/i, 'grass_top.png'); renamed = true;
+    } else if (pathLower.endsWith('grass_block_snow.png')) {
+        legacyPath = legacyPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'); renamed = true;
     }
     
-    // WOOD TOOLS
-    if (path.endsWith('/item/wooden_sword.png')) {
-        addDuplicate(originalPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'));
-    }
-    if (path.endsWith('/item/wooden_pickaxe.png')) {
-        addDuplicate(originalPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'));
-    }
-    if (path.endsWith('/item/wooden_axe.png')) {
-        addDuplicate(originalPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'));
-    }
-    if (path.endsWith('/item/wooden_shovel.png')) {
-        addDuplicate(originalPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'));
-    }
-    if (path.endsWith('/item/wooden_hoe.png')) {
-        addDuplicate(originalPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'));
+    // --- FARMLAND ---
+    else if (pathLower.endsWith('farmland.png')) {
+        legacyPath = legacyPath.replace(/farmland\.png$/i, 'farmland_dry.png'); renamed = true;
+    } else if (pathLower.endsWith('farmland_moist.png')) {
+        legacyPath = legacyPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'); renamed = true;
     }
     
-    // GOLD TOOLS & ARMOR
-    if (path.endsWith('/item/golden_sword.png')) {
-        addDuplicate(originalPath.replace(/golden_sword\.png$/i, 'gold_sword.png'));
-    }
-    if (path.endsWith('/item/golden_pickaxe.png')) {
-        addDuplicate(originalPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'));
-    }
-    if (path.endsWith('/item/golden_axe.png')) {
-        addDuplicate(originalPath.replace(/golden_axe\.png$/i, 'gold_axe.png'));
-    }
-    if (path.endsWith('/item/golden_shovel.png')) {
-        addDuplicate(originalPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'));
-    }
-    if (path.endsWith('/item/golden_hoe.png')) {
-        addDuplicate(originalPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'));
-    }
-    if (path.endsWith('/item/golden_helmet.png')) {
-        addDuplicate(originalPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'));
-    }
-    if (path.endsWith('/item/golden_chestplate.png')) {
-        addDuplicate(originalPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'));
-    }
-    if (path.endsWith('/item/golden_leggings.png')) {
-        addDuplicate(originalPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'));
-    }
-    if (path.endsWith('/item/golden_boots.png')) {
-        addDuplicate(originalPath.replace(/golden_boots\.png$/i, 'gold_boots.png'));
-    }
-    if (path.endsWith('/item/golden_apple.png')) {
-        addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
+    // --- GRASS PATH ---
+    else if (pathLower.endsWith('dirt_path_top.png')) {
+        legacyPath = legacyPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'); renamed = true;
+    } else if (pathLower.endsWith('dirt_path_side.png')) {
+        legacyPath = legacyPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'); renamed = true;
     }
     
-    // DYES
-    const dyeColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 
-                       'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    // --- WOOD TOOLS ---
+    else if (pathLower.endsWith('wooden_sword.png')) { legacyPath = legacyPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'); renamed = true; }
+    else if (pathLower.endsWith('wooden_pickaxe.png')) { legacyPath = legacyPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'); renamed = true; }
+    else if (pathLower.endsWith('wooden_axe.png')) { legacyPath = legacyPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'); renamed = true; }
+    else if (pathLower.endsWith('wooden_shovel.png')) { legacyPath = legacyPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'); renamed = true; }
+    else if (pathLower.endsWith('wooden_hoe.png')) { legacyPath = legacyPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'); renamed = true; }
     
-    for (const color of dyeColors) {
-        if (path.endsWith(`/item/${color}_dye.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_dye\\.png$`, 'i'), `dye_${color}.png`));
+    // --- GOLD TOOLS & ARMOR ---
+    else if (pathLower.endsWith('golden_sword.png')) { legacyPath = legacyPath.replace(/golden_sword\.png$/i, 'gold_sword.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_pickaxe.png')) { legacyPath = legacyPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_axe.png')) { legacyPath = legacyPath.replace(/golden_axe\.png$/i, 'gold_axe.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_shovel.png')) { legacyPath = legacyPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_hoe.png')) { legacyPath = legacyPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_helmet.png')) { legacyPath = legacyPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_chestplate.png')) { legacyPath = legacyPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_leggings.png')) { legacyPath = legacyPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_boots.png')) { legacyPath = legacyPath.replace(/golden_boots\.png$/i, 'gold_boots.png'); renamed = true; }
+    else if (pathLower.endsWith('golden_apple.png')) { legacyPath = legacyPath.replace(/golden_apple\.png$/i, 'apple_golden.png'); renamed = true; }
+    
+    // --- DYES ---
+    // Modern: white_dye.png -> Legacy: dye_white.png
+    else if (pathLower.includes('_dye.png')) {
+        const dyeMatch = pathLower.match(/\/([a-z_]+)_dye\.png$/);
+        if (dyeMatch) {
+            const color = dyeMatch[1];
+            legacyPath = legacyPath.replace(`${color}_dye.png`, `dye_${color}.png`);
+            renamed = true;
         }
     }
     
-    // GLASS & GLASS PANES
-    const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of glassColors) {
-        if (path.endsWith(`/block/${color}_stained_glass.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass\\.png$`, 'i'), `glass_${color}.png`));
-        }
-        if (path.endsWith(`/block/${color}_stained_glass_pane_top.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass_pane_top\\.png$`, 'i'), `glass_pane_top_${color}.png`));
+    // --- GLASS ---
+    // Modern: white_stained_glass.png -> Legacy: glass_white.png
+    else if (pathLower.includes('_stained_glass.png')) {
+        const glassMatch = pathLower.match(/\/([a-z_]+)_stained_glass\.png$/);
+        if (glassMatch) {
+            const color = glassMatch[1];
+            legacyPath = legacyPath.replace(`${color}_stained_glass.png`, `glass_${color}.png`);
+            renamed = true;
         }
     }
     
-    // WOOL
-    const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                        'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of woolColors) {
-        if (path.endsWith(`/block/${color}_wool.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_wool\\.png$`, 'i'), `wool_colored_${color}.png`));
+    // --- GLASS PANES ---
+    // Modern: white_stained_glass_pane_top.png -> Legacy: glass_pane_top_white.png
+    else if (pathLower.includes('_stained_glass_pane_top.png')) {
+        const paneMatch = pathLower.match(/\/([a-z_]+)_stained_glass_pane_top\.png$/);
+        if (paneMatch) {
+            const color = paneMatch[1];
+            legacyPath = legacyPath.replace(`${color}_stained_glass_pane_top.png`, `glass_pane_top_${color}.png`);
+            renamed = true;
         }
     }
     
-    // TERRACOTTA
-    const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                              'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of terracottaColors) {
-        if (path.endsWith(`/block/${color}_terracotta.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_terracotta\\.png$`, 'i'), `hardened_clay_stained_${color}.png`));
+    // --- WOOL ---
+    // Modern: white_wool.png -> Legacy: wool_colored_white.png
+    else if (pathLower.includes('_wool.png')) {
+        const woolMatch = pathLower.match(/\/([a-z_]+)_wool\.png$/);
+        if (woolMatch) {
+            const color = woolMatch[1];
+            legacyPath = legacyPath.replace(`${color}_wool.png`, `wool_colored_${color}.png`);
+            renamed = true;
         }
     }
     
-    if (path.endsWith('/block/terracotta.png')) {
-        addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
+    // --- TERRACOTTA ---
+    else if (pathLower.endsWith('/terracotta.png')) {
+        legacyPath = legacyPath.replace(/terracotta\.png$/i, 'hardened_clay.png');
+        renamed = true;
     }
-    
-    // GLAZED TERRACOTTA
-    const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                          'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of glazedColors) {
-        if (path.endsWith(`/block/${color}_glazed_terracotta.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_glazed_terracotta\\.png$`, 'i'), `glazed_terracotta_${color}.png`));
+    else if (pathLower.includes('_terracotta.png')) {
+        // Exclude glazed terracotta here
+        if (!pathLower.includes('glazed')) {
+            const terraMatch = pathLower.match(/\/([a-z_]+)_terracotta\.png$/);
+            if (terraMatch) {
+                const color = terraMatch[1];
+                legacyPath = legacyPath.replace(`${color}_terracotta.png`, `hardened_clay_stained_${color}.png`);
+                renamed = true;
+            }
         }
     }
     
-    // LOGS
-    const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    // --- GLAZED TERRACOTTA ---
+    else if (pathLower.includes('_glazed_terracotta.png')) {
+        const glazedMatch = pathLower.match(/\/([a-z_]+)_glazed_terracotta\.png$/);
+        if (glazedMatch) {
+            const color = glazedMatch[1];
+            legacyPath = legacyPath.replace(`${color}_glazed_terracotta.png`, `glazed_terracotta_${color}.png`);
+            renamed = true;
+        }
+    }
     
-    for (const wood of logTypes) {
-        if (path.endsWith(`/block/${wood}_log.png`)) {
+    // --- LOGS ---
+    // Modern: oak_log.png -> Legacy: log_oak.png
+    else if (pathLower.endsWith('_log.png')) {
+        const logMatch = pathLower.match(/\/([a-z_]+)_log\.png$/);
+        if (logMatch) {
+            let wood = logMatch[1];
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_log\\.png$`, 'i'), `log_${legacyName}.png`));
+            legacyPath = legacyPath.replace(`${wood}_log.png`, `log_${legacyName}.png`);
+            renamed = true;
         }
-        if (path.endsWith(`/block/${wood}_log_top.png`)) {
+    }
+    else if (pathLower.endsWith('_log_top.png')) {
+        const logTopMatch = pathLower.match(/\/([a-z_]+)_log_top\.png$/);
+        if (logTopMatch) {
+            let wood = logTopMatch[1];
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_log_top\\.png$`, 'i'), `log_${legacyName}_top.png`));
+            legacyPath = legacyPath.replace(`${wood}_log_top.png`, `log_${legacyName}_top.png`);
+            renamed = true;
         }
     }
     
-    // PLANKS
-    const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of plankTypes) {
-        if (path.endsWith(`/block/${wood}_planks.png`)) {
+    // --- PLANKS ---
+    // Modern: oak_planks.png -> Legacy: planks_oak.png
+    else if (pathLower.endsWith('_planks.png')) {
+        const plankMatch = pathLower.match(/\/([a-z_]+)_planks\.png$/);
+        if (plankMatch) {
+            let wood = plankMatch[1];
             const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_planks\\.png$`, 'i'), `planks_${legacyName}.png`));
+            legacyPath = legacyPath.replace(`${wood}_planks.png`, `planks_${legacyName}.png`);
+            renamed = true;
         }
     }
     
-    // NETHER QUARTZ
-    if (path.endsWith('/block/nether_quartz_ore.png')) {
-        addDuplicate(originalPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'));
-    }
-    
-    // RED NETHER BRICK
-    if (path.endsWith('/block/red_nether_bricks.png')) {
-        addDuplicate(originalPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'));
-    }
-    
-    // TOTEM
-    if (path.endsWith('/item/totem_of_undying.png')) {
-        addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
-    }
+    // --- MISC MAPPINGS ---
+    else if (pathLower.endsWith('nether_quartz_ore.png')) { legacyPath = legacyPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'); renamed = true; }
+    else if (pathLower.endsWith('red_nether_bricks.png')) { legacyPath = legacyPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'); renamed = true; }
+    else if (pathLower.endsWith('totem_of_undying.png')) { legacyPath = legacyPath.replace(/totem_of_undying\.png$/i, 'totem.png'); renamed = true; }
+    else if (pathLower.endsWith('slime_ball.png')) { legacyPath = legacyPath.replace(/slime_ball\.png$/i, 'slimeball.png'); renamed = true; }
+    else if (pathLower.endsWith('magma_cream.png')) { legacyPath = legacyPath.replace(/magma_cream\.png$/i, 'magma_cream.png'); renamed = true; } // Folder fix only
+
+    // 3. ADD FILE TO ZIP
+    // We add the file to the new "plural" folder structure (items/blocks)
+    // regardless of whether the name changed or not.
+    outputZip.file(legacyPath, content);
 }
 
 function modifyPackMcmeta(content) {
