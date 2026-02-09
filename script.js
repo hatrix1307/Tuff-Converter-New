@@ -121,8 +121,6 @@ function handleFileSelect(e) {
 
 function handleFile(file) {
     state.file = file;
-    
-    // Update UI
     document.getElementById('fileInfo').style.display = 'block';
     document.getElementById('fileName').textContent = file.name;
     document.getElementById('fileSize').textContent = formatBytes(file.size);
@@ -146,82 +144,59 @@ async function convertPack() {
     const progressSection = document.getElementById('progressSection');
     const convertBtn = document.getElementById('convertBtn');
     
-    // Show progress
     progressSection.style.display = 'block';
     convertBtn.disabled = true;
     convertBtn.querySelector('.btn-text').textContent = 'CONVERTING...';
 
     try {
         updateProgress(0, 'Loading resource pack...');
-        
-        // Load the zip file
         const zip = await JSZip.loadAsync(state.file);
         updateProgress(10, 'Analyzing file structure...');
 
-        // Create output zip
         const outputZip = new JSZip();
         let processedFiles = 0;
         const totalFiles = Object.keys(zip.files).length;
 
-        // Process each file
         for (const [path, file] of Object.entries(zip.files)) {
             processedFiles++;
             const percent = 10 + Math.floor((processedFiles / totalFiles) * 70);
             
-            if (processedFiles % 10 === 0) {
+            if (processedFiles % 20 === 0) {
                 updateProgress(percent, `Processing files... (${processedFiles}/${totalFiles})`);
-                await sleep(0); // Allow UI to update
+                await sleep(0);
             }
 
-            // Skip if it's a directory
             if (file.dir) continue;
+            if (shouldSkipFile(path)) continue;
 
-            // Check if we should skip this file
-            if (shouldSkipFile(path)) {
-                continue;
-            }
-
-            // Special handling for pack.mcmeta
             if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
                 const content = await file.async('string');
-                const modified = modifyPackMcmeta(content);
-                outputZip.file(path, modified);
+                outputZip.file(path, modifyPackMcmeta(content));
                 continue;
             }
 
-            // Get file content
+            // Get content once
             const content = await file.async('blob');
 
-            // Add the original file (keeps modern compatibility if needed)
-            outputZip.file(path, content);
-
-            // Create legacy duplicates (fixes folder names and renames files)
-            await createLegacyDuplicates(outputZip, path, content);
+            // Process and Move the file to the correct Legacy location
+            await processAndMoveFile(outputZip, path, content);
         }
 
-        updateProgress(80, 'Finalizing conversion...');
-
-        // Generate the zip file
         updateProgress(90, 'Generating download...');
         const blob = await outputZip.generateAsync({
             type: 'blob',
             compression: 'DEFLATE',
             compressionOptions: { level: 6 }
         }, (metadata) => {
-            const percent = 90 + Math.floor(metadata.percent / 10);
-            updateProgress(percent, 'Compressing files...');
+            updateProgress(90 + Math.floor(metadata.percent / 10), 'Compressing files...');
         });
 
-        updateProgress(100, 'Complete! Downloading...');
-
-        // Download the file
         const filename = state.options.packName 
             ? `${state.options.packName}_TuffClient.zip`
             : state.file.name.replace('.zip', '_TuffClient.zip');
         
         saveAs(blob, filename);
 
-        // Success message
         setTimeout(() => {
             updateProgress(100, '✅ Conversion complete! Check your downloads.');
             convertBtn.querySelector('.btn-text').textContent = 'CONVERT ANOTHER PACK';
@@ -231,7 +206,6 @@ async function convertPack() {
     } catch (error) {
         console.error('Conversion error:', error);
         updateProgress(0, `❌ Error: ${error.message}`);
-        convertBtn.querySelector('.btn-text').textContent = 'TRY AGAIN';
         convertBtn.disabled = false;
     }
 }
@@ -239,237 +213,179 @@ async function convertPack() {
 function shouldSkipFile(path) {
     const pathLower = path.toLowerCase();
 
-    // Skip files in folders to remove
+    // Skip non-minecraft assets (usually)
+    if (!pathLower.includes('assets/minecraft/')) return true;
+
     if (state.options.removeNonTextures) {
         for (const folder of FOLDERS_TO_REMOVE) {
-            // Check for both forward and backslashes
             if (pathLower.includes(`/${folder}/`) || pathLower.includes(`\\${folder}\\`)) {
                 return true;
             }
         }
-
-        // Skip specific files
         for (const file of FILES_TO_REMOVE) {
-            if (pathLower.endsWith(file)) {
-                return true;
-            }
+            if (pathLower.endsWith(file)) return true;
         }
     }
 
-    // Skip template-only files
     const filename = path.split('/').pop();
-    if (TEMPLATE_ONLY_FILES.includes(filename)) {
-        return true;
-    }
+    if (TEMPLATE_ONLY_FILES.includes(filename)) return true;
 
-    // Only skip specific new mob textures if option is disabled
     if (!state.options.convertNewMobs && pathLower.includes('entity/')) {
-        const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer'];
+        const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer', 'breeze', 'armadillo'];
         for (const mob of newMobs) {
-            if (pathLower.includes(mob)) {
-                return true;
-            }
+            if (pathLower.includes(mob)) return true;
         }
     }
 
     return false;
 }
 
-async function createLegacyDuplicates(outputZip, originalPath, content) {
-    // We strictly only care about textures in 'block' and 'item'
-    // because Tuff Client (Legacy) requires 'blocks' and 'items'.
+// THIS FUNCTION HANDLES ALL RENAMING AND MOVING
+async function processAndMoveFile(outputZip, originalPath, content) {
     const pathLower = originalPath.toLowerCase();
     
-    // Check if this is a block or item texture
-    const isBlock = pathLower.includes('/textures/block/');
-    const isItem = pathLower.includes('/textures/item/');
+    // We only care about assets/minecraft/textures
+    if (!pathLower.includes('assets/minecraft/textures/')) {
+        // preserve other files (like pack.png)
+        outputZip.file(originalPath, content);
+        return;
+    }
 
-    if (!isBlock && !isItem) return;
-
-    // 1. FIX FOLDER STRUCTURE (Singular -> Plural)
-    // Replace /block/ with /blocks/ and /item/ with /items/
+    // 1. Base Folder Correction (Singular -> Plural)
     let legacyPath = originalPath
         .replace(/\/textures\/block\//g, '/textures/blocks/')
         .replace(/\/textures\/item\//g, '/textures/items/');
 
-    // 2. APPLY FILENAME MAPPINGS
-    // We modify 'legacyPath' based on renaming rules
-    
     let renamed = false;
 
-    // --- GRASS BLOCKS ---
-    if (pathLower.endsWith('grass_block_side_overlay.png')) {
-        legacyPath = legacyPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'); renamed = true;
-    } else if (pathLower.endsWith('grass_block_side.png')) {
-        legacyPath = legacyPath.replace(/grass_block_side\.png$/i, 'grass_side.png'); renamed = true;
-    } else if (pathLower.endsWith('grass_block_top.png')) {
-        legacyPath = legacyPath.replace(/grass_block_top\.png$/i, 'grass_top.png'); renamed = true;
-    } else if (pathLower.endsWith('grass_block_snow.png')) {
-        legacyPath = legacyPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'); renamed = true;
-    }
+    // --- BLOCKS (renaming) ---
     
-    // --- FARMLAND ---
-    else if (pathLower.endsWith('farmland.png')) {
-        legacyPath = legacyPath.replace(/farmland\.png$/i, 'farmland_dry.png'); renamed = true;
-    } else if (pathLower.endsWith('farmland_moist.png')) {
-        legacyPath = legacyPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'); renamed = true;
-    }
+    // GRASS
+    if (pathLower.endsWith('grass_block_side_overlay.png')) { legacyPath = legacyPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'); }
+    else if (pathLower.endsWith('grass_block_side.png')) { legacyPath = legacyPath.replace(/grass_block_side\.png$/i, 'grass_side.png'); }
+    else if (pathLower.endsWith('grass_block_top.png')) { legacyPath = legacyPath.replace(/grass_block_top\.png$/i, 'grass_top.png'); }
+    else if (pathLower.endsWith('grass_block_snow.png')) { legacyPath = legacyPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'); }
     
-    // --- GRASS PATH ---
-    else if (pathLower.endsWith('dirt_path_top.png')) {
-        legacyPath = legacyPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'); renamed = true;
-    } else if (pathLower.endsWith('dirt_path_side.png')) {
-        legacyPath = legacyPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'); renamed = true;
-    }
+    // FARMLAND
+    else if (pathLower.endsWith('farmland.png')) { legacyPath = legacyPath.replace(/farmland\.png$/i, 'farmland_dry.png'); }
+    else if (pathLower.endsWith('farmland_moist.png')) { legacyPath = legacyPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'); }
     
-    // --- WOOD TOOLS ---
-    else if (pathLower.endsWith('wooden_sword.png')) { legacyPath = legacyPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'); renamed = true; }
-    else if (pathLower.endsWith('wooden_pickaxe.png')) { legacyPath = legacyPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'); renamed = true; }
-    else if (pathLower.endsWith('wooden_axe.png')) { legacyPath = legacyPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'); renamed = true; }
-    else if (pathLower.endsWith('wooden_shovel.png')) { legacyPath = legacyPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'); renamed = true; }
-    else if (pathLower.endsWith('wooden_hoe.png')) { legacyPath = legacyPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'); renamed = true; }
-    
-    // --- GOLD TOOLS & ARMOR ---
-    else if (pathLower.endsWith('golden_sword.png')) { legacyPath = legacyPath.replace(/golden_sword\.png$/i, 'gold_sword.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_pickaxe.png')) { legacyPath = legacyPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_axe.png')) { legacyPath = legacyPath.replace(/golden_axe\.png$/i, 'gold_axe.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_shovel.png')) { legacyPath = legacyPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_hoe.png')) { legacyPath = legacyPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_helmet.png')) { legacyPath = legacyPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_chestplate.png')) { legacyPath = legacyPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_leggings.png')) { legacyPath = legacyPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_boots.png')) { legacyPath = legacyPath.replace(/golden_boots\.png$/i, 'gold_boots.png'); renamed = true; }
-    else if (pathLower.endsWith('golden_apple.png')) { legacyPath = legacyPath.replace(/golden_apple\.png$/i, 'apple_golden.png'); renamed = true; }
-    
-    // --- DYES ---
-    // Modern: white_dye.png -> Legacy: dye_white.png
-    else if (pathLower.includes('_dye.png')) {
-        const dyeMatch = pathLower.match(/\/([a-z_]+)_dye\.png$/);
-        if (dyeMatch) {
-            const color = dyeMatch[1];
-            legacyPath = legacyPath.replace(`${color}_dye.png`, `dye_${color}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- GLASS ---
-    // Modern: white_stained_glass.png -> Legacy: glass_white.png
-    else if (pathLower.includes('_stained_glass.png')) {
-        const glassMatch = pathLower.match(/\/([a-z_]+)_stained_glass\.png$/);
-        if (glassMatch) {
-            const color = glassMatch[1];
-            legacyPath = legacyPath.replace(`${color}_stained_glass.png`, `glass_${color}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- GLASS PANES ---
-    // Modern: white_stained_glass_pane_top.png -> Legacy: glass_pane_top_white.png
-    else if (pathLower.includes('_stained_glass_pane_top.png')) {
-        const paneMatch = pathLower.match(/\/([a-z_]+)_stained_glass_pane_top\.png$/);
-        if (paneMatch) {
-            const color = paneMatch[1];
-            legacyPath = legacyPath.replace(`${color}_stained_glass_pane_top.png`, `glass_pane_top_${color}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- WOOL ---
-    // Modern: white_wool.png -> Legacy: wool_colored_white.png
-    else if (pathLower.includes('_wool.png')) {
-        const woolMatch = pathLower.match(/\/([a-z_]+)_wool\.png$/);
-        if (woolMatch) {
-            const color = woolMatch[1];
-            legacyPath = legacyPath.replace(`${color}_wool.png`, `wool_colored_${color}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- TERRACOTTA ---
-    else if (pathLower.endsWith('/terracotta.png')) {
-        legacyPath = legacyPath.replace(/terracotta\.png$/i, 'hardened_clay.png');
-        renamed = true;
-    }
-    else if (pathLower.includes('_terracotta.png')) {
-        // Exclude glazed terracotta here
-        if (!pathLower.includes('glazed')) {
-            const terraMatch = pathLower.match(/\/([a-z_]+)_terracotta\.png$/);
-            if (terraMatch) {
-                const color = terraMatch[1];
-                legacyPath = legacyPath.replace(`${color}_terracotta.png`, `hardened_clay_stained_${color}.png`);
-                renamed = true;
-            }
-        }
-    }
-    
-    // --- GLAZED TERRACOTTA ---
-    else if (pathLower.includes('_glazed_terracotta.png')) {
-        const glazedMatch = pathLower.match(/\/([a-z_]+)_glazed_terracotta\.png$/);
-        if (glazedMatch) {
-            const color = glazedMatch[1];
-            legacyPath = legacyPath.replace(`${color}_glazed_terracotta.png`, `glazed_terracotta_${color}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- LOGS ---
-    // Modern: oak_log.png -> Legacy: log_oak.png
-    else if (pathLower.endsWith('_log.png')) {
-        const logMatch = pathLower.match(/\/([a-z_]+)_log\.png$/);
-        if (logMatch) {
-            let wood = logMatch[1];
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            legacyPath = legacyPath.replace(`${wood}_log.png`, `log_${legacyName}.png`);
-            renamed = true;
-        }
-    }
-    else if (pathLower.endsWith('_log_top.png')) {
-        const logTopMatch = pathLower.match(/\/([a-z_]+)_log_top\.png$/);
-        if (logTopMatch) {
-            let wood = logTopMatch[1];
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            legacyPath = legacyPath.replace(`${wood}_log_top.png`, `log_${legacyName}_top.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- PLANKS ---
-    // Modern: oak_planks.png -> Legacy: planks_oak.png
-    else if (pathLower.endsWith('_planks.png')) {
-        const plankMatch = pathLower.match(/\/([a-z_]+)_planks\.png$/);
-        if (plankMatch) {
-            let wood = plankMatch[1];
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            legacyPath = legacyPath.replace(`${wood}_planks.png`, `planks_${legacyName}.png`);
-            renamed = true;
-        }
-    }
-    
-    // --- MISC MAPPINGS ---
-    else if (pathLower.endsWith('nether_quartz_ore.png')) { legacyPath = legacyPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'); renamed = true; }
-    else if (pathLower.endsWith('red_nether_bricks.png')) { legacyPath = legacyPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'); renamed = true; }
-    else if (pathLower.endsWith('totem_of_undying.png')) { legacyPath = legacyPath.replace(/totem_of_undying\.png$/i, 'totem.png'); renamed = true; }
-    else if (pathLower.endsWith('slime_ball.png')) { legacyPath = legacyPath.replace(/slime_ball\.png$/i, 'slimeball.png'); renamed = true; }
-    else if (pathLower.endsWith('magma_cream.png')) { legacyPath = legacyPath.replace(/magma_cream\.png$/i, 'magma_cream.png'); renamed = true; } // Folder fix only
+    // GRASS PATH
+    else if (pathLower.endsWith('dirt_path_top.png')) { legacyPath = legacyPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'); }
+    else if (pathLower.endsWith('dirt_path_side.png')) { legacyPath = legacyPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'); }
 
-    // 3. ADD FILE TO ZIP
-    // We add the file to the new "plural" folder structure (items/blocks)
-    // regardless of whether the name changed or not.
+    // LEAVES (Modern: oak_leaves.png -> Legacy: leaves_oak.png)
+    else if (pathLower.includes('_leaves.png')) {
+        const leafMatch = pathLower.match(/\/([a-z_]+)_leaves\.png$/);
+        if (leafMatch) {
+            let wood = leafMatch[1];
+            // Dark oak special case
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            // Jungle leaves special case (sometimes texture packs have opaque/transparent variants, usually handled by game, but filename is simple)
+            legacyPath = legacyPath.replace(`${wood}_leaves.png`, `leaves_${legacyName}.png`);
+        }
+    }
+
+    // LOGS & PLANKS
+    else if (pathLower.includes('_log.png') || pathLower.includes('_planks.png')) {
+        const type = pathLower.includes('_log') ? 'log' : 'planks';
+        const match = pathLower.match(new RegExp(`\/([a-z_]+)_${type}(_top)?\\.png$`));
+        if (match) {
+            let wood = match[1];
+            let suffix = match[2] || '';
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            legacyPath = legacyPath.replace(`${wood}_${type}${suffix}.png`, `${type}_${legacyName}${suffix}.png`);
+        }
+    }
+
+    // STONES
+    else if (pathLower.endsWith('cobblestone.png')) { /* name same */ }
+    else if (pathLower.endsWith('mossy_cobblestone.png')) { /* name same */ }
+    else if (pathLower.endsWith('stone.png')) { /* name same */ }
+    
+    // ORES & MINERALS
+    else if (pathLower.endsWith('nether_quartz_ore.png')) { legacyPath = legacyPath.replace('nether_quartz_ore.png', 'quartz_ore.png'); }
+    
+    // --- ITEMS (renaming) ---
+    
+    // TOOLS
+    else if (pathLower.includes('wooden_')) { legacyPath = legacyPath.replace('wooden_', 'wood_'); }
+    else if (pathLower.includes('golden_')) { 
+        // Golden apple is exception
+        if (pathLower.endsWith('golden_apple.png')) legacyPath = legacyPath.replace('golden_apple.png', 'apple_golden.png');
+        else legacyPath = legacyPath.replace('golden_', 'gold_'); 
+    }
+    
+    // DYES, GLASS, WOOL, TERRACOTTA
+    // (Handled by generic patterns)
+    else if (pathLower.includes('_dye.png')) {
+        const m = pathLower.match(/\/([a-z_]+)_dye\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_dye.png`, `dye_${m[1]}.png`);
+    }
+    else if (pathLower.includes('_stained_glass.png')) {
+        const m = pathLower.match(/\/([a-z_]+)_stained_glass\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_stained_glass.png`, `glass_${m[1]}.png`);
+    }
+    else if (pathLower.includes('_stained_glass_pane_top.png')) {
+        const m = pathLower.match(/\/([a-z_]+)_stained_glass_pane_top\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_stained_glass_pane_top.png`, `glass_pane_top_${m[1]}.png`);
+    }
+    else if (pathLower.includes('_wool.png')) {
+        const m = pathLower.match(/\/([a-z_]+)_wool\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_wool.png`, `wool_colored_${m[1]}.png`);
+    }
+    else if (pathLower.endsWith('/terracotta.png')) { legacyPath = legacyPath.replace('terracotta.png', 'hardened_clay.png'); }
+    else if (pathLower.includes('_terracotta.png') && !pathLower.includes('glazed')) {
+        const m = pathLower.match(/\/([a-z_]+)_terracotta\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_terracotta.png`, `hardened_clay_stained_${m[1]}.png`);
+    }
+    else if (pathLower.includes('_glazed_terracotta.png')) {
+        const m = pathLower.match(/\/([a-z_]+)_glazed_terracotta\.png$/);
+        if (m) legacyPath = legacyPath.replace(`${m[1]}_glazed_terracotta.png`, `glazed_terracotta_${m[1]}.png`);
+    }
+
+    // --- ENTITIES & GUI (Fixing the black mobs / default chest issues) ---
+    
+    // CHESTS (Modern has split files, Legacy has one. We map single chest.)
+    else if (pathLower.includes('entity/chest/')) {
+        if (pathLower.endsWith('normal.png')) { 
+            // In 1.21 normal.png is single chest. In 1.12 it is also normal.png. 
+            // Path is usually textures/entity/chest/normal.png
+            // Ensure folder structure is clean
+        }
+        // Double chests are impossible to fix perfectly without canvas stitching
+        // because modern has left.png + right.png, legacy wants double_normal.png
+    }
+    
+    // SIGNS (Modern: entity/signs/oak.png -> Legacy: entity/sign.png)
+    else if (pathLower.includes('entity/signs/')) {
+        if (pathLower.endsWith('oak.png')) {
+            legacyPath = legacyPath.replace('/signs/oak.png', '/sign.png');
+        } else {
+            // Remove other wood types for signs as 1.12 only supported oak visual
+            return; 
+        }
+    }
+
+    // BEDS (Modern: entity/bed/red.png -> Legacy: entity/bed/red.png)
+    // Just ensure the folder maps correctly.
+    
+    // ENCHANTING TABLE BOOK
+    else if (pathLower.includes('entity/enchanting_table_book.png')) {
+        legacyPath = legacyPath.replace('enchanting_table_book.png', 'enchanting_table_book.png'); // ensure pass
+    }
+
+    // Add the file to the zip
     outputZip.file(legacyPath, content);
 }
 
 function modifyPackMcmeta(content) {
     try {
         const data = JSON.parse(content);
-        
-        // Only update description if custom pack name is provided
         if (state.options.packName) {
             data.pack.description = `${state.options.packName} - Tuff Client Edition`;
         }
-        
-        // Ensure pack format is 3 (1.11-1.12.x)
         data.pack.pack_format = 3;
-
         return JSON.stringify(data, null, 4);
     } catch (error) {
         console.error('Error modifying pack.mcmeta:', error);
@@ -508,8 +424,6 @@ function loadOptions() {
         try {
             const options = JSON.parse(saved);
             state.options = { ...state.options, ...options };
-            
-            // Update UI
             document.getElementById('removeNonTextures').checked = state.options.removeNonTextures;
             document.getElementById('convertNewMobs').checked = state.options.convertNewMobs;
             document.getElementById('updateMcmeta').checked = state.options.updateMcmeta;
@@ -520,20 +434,14 @@ function loadOptions() {
     }
 }
 
-// Utility: Check if browser supports required features
 function checkBrowserSupport() {
-    if (typeof JSZip === 'undefined') {
-        alert('JSZip library failed to load. Please refresh the page.');
-        return false;
-    }
-    if (typeof saveAs === 'undefined') {
-        alert('FileSaver library failed to load. Please refresh the page.');
+    if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
+        alert('Libraries failed to load. Please refresh the page.');
         return false;
     }
     return true;
 }
 
-// Check on load
 window.addEventListener('load', () => {
     if (!checkBrowserSupport()) {
         document.getElementById('convertBtn').disabled = true;
