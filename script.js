@@ -1,12 +1,11 @@
 /**
- * Tuff Client Universal Converter - PRO API EDITION
- * Fixes: Black Mobs, Leaf/Grass/Farmland defaults, Double Chests.
- * Features: Automatic API Reversal & Dual-Path preservation.
+ * Tuff Client Universal Converter - API & Stitching Edition
+ * Logic: Fetches official 1.13 renames, flattens entities, and stitches chests.
  */
 
 const state = {
     file: null,
-    mappingData: null, // This will hold the REVERSED mapping (New -> Old)
+    mappingData: {},
     options: {
         removeNonTextures: true,
         convertNewMobs: false,
@@ -15,94 +14,116 @@ const state = {
     }
 };
 
-// Official source for "The Flattening" data
-const API_URL = "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/1.13/block_renames.json";
+// Official Mapping API sources
+const API_SOURCES = [
+    "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/1.13/block_renames.json",
+    "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/1.13/item_renames.json"
+];
+
+// Folders/Files to remove (from your original template)
+const FOLDERS_TO_REMOVE = ['models', 'sounds', 'lang', 'advancements', 'loot_tables', 'recipes', 'structures', 'shaders', 'font', 'texts', 'eagler'];
+const FILES_TO_REMOVE = ['sounds.json', '.mcassetsroot'];
+const TEMPLATE_ONLY_FILES = ['bamboo_bottom.png', 'bamboo_side.png', 'bamboo_top.png', 'bell_bottom.png', 'bell_side.png', 'bell_top.png', 'bush.png', 'cactus_flower.png', 'conduit.png'];
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
-    initializeUI();
+    initializeEventListeners();
     loadOptions();
-    await loadAndReverseAPI();
+    await fetchAndInvertMappings();
 });
 
-async function loadAndReverseAPI() {
-    const status = document.getElementById('progressLabel');
-    if(status) status.textContent = "Fetching Mapping API...";
-
+async function fetchAndInvertMappings() {
     try {
-        const response = await fetch(API_URL);
-        const data = await response.json();
-        
-        // REVERSE THE MAPPING: The API is Old -> New, we need New -> Old
-        state.mappingData = {};
-        for (const [oldName, newName] of Object.entries(data)) {
-            const cleanOld = oldName.replace('minecraft:', '');
-            const cleanNew = newName.replace('minecraft:', '');
-            // We map the New Name to the Old Name
-            state.mappingData[cleanNew] = cleanOld;
+        for (const url of API_SOURCES) {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            for (const [oldName, newName] of Object.entries(data)) {
+                // Invert: New -> Old
+                state.mappingData[newName.replace('minecraft:', '')] = oldName.replace('minecraft:', '');
+            }
         }
-        console.log("✅ API Mapping Inverted & Loaded:", Object.keys(state.mappingData).length, "rules.");
+        console.log("✅ API Mappings Loaded:", Object.keys(state.mappingData).length);
     } catch (e) {
-        console.error("❌ API Load Failed:", e);
-        alert("Failed to load Mapping API. Please check your internet connection.");
+        console.error("❌ Failed to fetch mapping API:", e);
     }
 }
 
-// --- CONVERSION ENGINE ---
-async function convertPack() {
-    if (!state.mappingData) return alert("Mapping API is still loading...");
+function initializeEventListeners() {
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const convertBtn = document.getElementById('convertBtn');
 
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+    
+    ['dragover', 'drop'].forEach(n => dropZone.addEventListener(n, (e) => {
+        e.preventDefault();
+        n === 'dragover' ? dropZone.classList.add('drag-over') : dropZone.classList.remove('drag-over');
+        if (n === 'drop' && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    }));
+
+    convertBtn.addEventListener('click', convertPack);
+}
+
+function handleFile(file) {
+    if (!file || !file.name.endsWith('.zip')) return;
+    state.file = file;
+    document.getElementById('fileInfo').style.display = 'block';
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('convertBtn').disabled = false;
+}
+
+// --- CORE CONVERSION ENGINE ---
+async function convertPack() {
     const btn = document.getElementById('convertBtn');
     btn.disabled = true;
     document.getElementById('progressSection').style.display = 'block';
 
     try {
-        updateProgress(10, 'Reading ZIP Content...');
+        updateProgress(5, 'Parsing Pack...');
         const zip = await JSZip.loadAsync(state.file);
         const outputZip = new JSZip();
         const files = Object.keys(zip.files);
-        
-        // Storage for Double Chest Stitching
-        const chestParts = { normal: {}, trapped: {}, ender: {} };
+        const chestParts = { normal: {}, trapped: {} };
 
         for (let i = 0; i < files.length; i++) {
             const path = files[i];
             const file = zip.files[path];
-            if (file.dir) continue;
+            if (file.dir || shouldSkip(path)) continue;
 
-            const content = await file.async('blob');
             const pathLower = path.toLowerCase();
+            const content = await file.async('blob');
 
             // 1. Logic: Collect Chests for stitching
             if (pathLower.includes('entity/chest/')) {
-                const type = pathLower.includes('trapped') ? 'trapped' : (pathLower.includes('ender') ? 'ender' : 'normal');
+                const type = pathLower.includes('trapped') ? 'trapped' : 'normal';
                 if (pathLower.endsWith('left.png')) chestParts[type].left = content;
                 if (pathLower.endsWith('right.png')) chestParts[type].right = content;
             }
 
-            // 2. Logic: Process Textures
+            // 2. Logic: Process Textures (The API Pass)
             if (pathLower.includes('assets/minecraft/textures/')) {
-                await processAsset(outputZip, path, content);
+                await processTexture(outputZip, path, content);
             } 
-            // 3. Logic: Meta & Cleanup
+            // 3. Logic: Meta
             else if (pathLower.endsWith('pack.mcmeta')) {
                 const text = await file.async('string');
                 outputZip.file(path, modifyMcmeta(text));
-            } else if (!isTrash(pathLower)) {
+            } else {
                 outputZip.file(path, content);
             }
 
-            if (i % 50 === 0) updateProgress(10 + (i/files.length * 80), 'Converting with API...');
+            if (i % 40 === 0) updateProgress(5 + (i / files.length * 85), 'Processing Assets...');
         }
 
-        // 4. Logic: Final Stitching
-        updateProgress(90, 'Stitching Double Chests...');
-        await stitchChests(outputZip, chestParts);
+        // 4. Logic: Final Stitching for Double Chests
+        updateProgress(92, 'Stitching Double Chests...');
+        await stitchDoubleChests(outputZip, chestParts);
 
-        updateProgress(95, 'Finalizing Universal Pack...');
+        updateProgress(95, 'Generating Final Pack...');
         const blob = await outputZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        saveAs(blob, (state.options.packName || "Converted_Tuff_Pack") + ".zip");
-        updateProgress(100, 'Conversion Complete!');
+        saveAs(blob, (state.options.packName || "Converted_Pack") + ".zip");
+        updateProgress(100, 'Done!');
         btn.disabled = false;
     } catch (err) {
         console.error(err);
@@ -111,46 +132,47 @@ async function convertPack() {
     }
 }
 
-async function processAsset(zip, path, blob) {
+async function processTexture(zip, path, blob) {
     const pathLower = path.toLowerCase();
     
-    // REQUIREMENT: Always keep the 1.13+ Modern path for "Universal" support
+    // UNIVERSAL SUPPORT: Keep original modern file
     zip.file(path, blob);
 
-    const parts = pathLower.split('/');
-    const fileName = parts.pop().replace('.png', '');
-    const category = parts.includes('block') ? 'blocks' : (parts.includes('item') ? 'items' : parts[parts.length-1]);
+    const match = pathLower.match(/textures\/(.*)\.png$/);
+    if (!match) return;
+    const internal = match[1]; // e.g., "block/oak_leaves"
     
     let legacyPath = null;
+    const folder = internal.split('/')[0]; // "block" or "item" or "entity"
+    const fileName = internal.split('/').pop(); // "oak_leaves"
 
-    // RULE 1: API MAPPING (New Name -> Old Name)
-    // We check if the 1.21 filename exists as a value in the Flattening map
-    let mappedName = state.mappingData[fileName];
-    
-    // RULE 2: SUFFIX MAPPING (For things like grass_block_side)
-    if (!mappedName) {
-        for (let newName in state.mappingData) {
-            if (fileName.startsWith(newName + "_")) {
-                mappedName = state.mappingData[newName] + fileName.slice(newName.length);
+    // A. API MAPPING (New -> Old)
+    // Check for exact name or base-name renames (handles grass_block -> grass)
+    let legacyName = state.mappingData[fileName];
+    if (!legacyName) {
+        for (const [nKey, oVal] of Object.entries(state.mappingData)) {
+            if (fileName.startsWith(nKey + "_")) {
+                legacyName = oVal + fileName.slice(nKey.length);
                 break;
             }
         }
     }
 
-    if (mappedName) {
-        legacyPath = `assets/minecraft/textures/${category}/${mappedName}.png`;
+    if (legacyName) {
+        const pluralFolder = folder === 'block' ? 'blocks' : (folder === 'item' ? 'items' : folder);
+        legacyPath = `assets/minecraft/textures/${pluralFolder}/${legacyName}.png`;
     }
 
-    // RULE 3: ENTITY FLATTENING (Fixes Black Mobs)
-    if (pathLower.includes('entity/') && !legacyPath) {
-        const entityParts = pathLower.split('textures/entity/')[1].split('/');
-        if (entityParts.length > 1) {
-            // Pulls "zombie/zombie.png" out to "entity/zombie.png"
-            legacyPath = `assets/minecraft/textures/entity/${entityParts[entityParts.length-1]}`;
+    // B. ENTITY FLATTENING (Fixes Black Mobs)
+    else if (folder === 'entity') {
+        const parts = internal.split('/');
+        if (parts.length > 2) {
+            // e.g., entity/zombie/zombie.png -> entity/zombie.png
+            legacyPath = `assets/minecraft/textures/entity/${parts[parts.length - 1]}.png`;
         }
     }
 
-    // RULE 4: MANUAL OVERRIDES (Leaves, Dyes, Wood)
+    // C. SUFFIX SWAP (Leaves, Wood Tools, Dyes)
     if (!legacyPath) {
         if (fileName.includes('_leaves')) {
             legacyPath = path.replace(/block\/(.*)_leaves\.png$/, 'blocks/leaves_$1.png');
@@ -161,38 +183,34 @@ async function processAsset(zip, path, blob) {
         }
     }
 
-    // RULE 5: PLURALIZATION FALLBACK (block -> blocks)
+    // D. PLURALIZATION FALLBACK
     if (!legacyPath) {
         legacyPath = path.replace('/textures/block/', '/textures/blocks/')
                          .replace('/textures/item/', '/textures/items/');
     }
 
-    // Write the 1.12 Legacy file
-    if (legacyPath && legacyPath !== path) {
-        zip.file(legacyPath, blob);
-    }
+    if (legacyPath !== path) zip.file(legacyPath, blob);
 }
 
-// --- IMAGE STITCHING (Double Chests) ---
-async function stitchChests(zip, parts) {
+async function stitchDoubleChests(zip, chestParts) {
     for (const type of ['normal', 'trapped']) {
-        if (parts[type].left && parts[type].right) {
-            const stitchedBlob = await mergeImages(parts[type].left, parts[type].right);
+        if (chestParts[type].left && chestParts[type].right) {
+            const stitched = await mergeChestImages(chestParts[type].left, chestParts[type].right);
             const name = type === 'normal' ? 'normal_double.png' : 'trapped_double.png';
-            zip.file(`assets/minecraft/textures/entity/chest/${name}`, stitchedBlob);
+            zip.file(`assets/minecraft/textures/entity/chest/${name}`, stitched);
         }
     }
 }
 
-async function mergeImages(left, right) {
-    return new Promise(res => {
+async function mergeChestImages(left, right) {
+    return new Promise((res) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const imgL = new Image(), imgR = new Image();
         imgL.onload = () => {
             imgR.onload = () => {
                 canvas.width = imgL.width * 2; canvas.height = imgL.height;
-                ctx.drawImage(imgR, 0, 0); // Right side goes first in 1.12 map
+                ctx.drawImage(imgR, 0, 0); // 1.12 Double chests put right side first
                 ctx.drawImage(imgL, imgL.width, 0);
                 canvas.toBlob(res);
             };
@@ -202,48 +220,32 @@ async function mergeImages(left, right) {
     });
 }
 
-// --- HELPERS ---
-function isTrash(path) {
-    if (!state.options.removeNonTextures) return false;
-    const junk = ['models/', 'sounds/', 'lang/', 'advancements/', 'recipes/', 'shaders/', 'texts/', 'font/'];
-    return junk.some(f => path.includes(f));
+// --- UTILS ---
+function shouldSkip(path) {
+    const p = path.toLowerCase();
+    if (state.options.removeNonTextures) {
+        if (FOLDERS_TO_REMOVE.some(f => p.includes(`/${f}/`))) return true;
+        if (FILES_TO_REMOVE.some(f => p.endsWith(f))) return true;
+    }
+    const filename = path.split('/').pop();
+    if (TEMPLATE_ONLY_FILES.includes(filename)) return true;
+    return false;
 }
 
 function modifyMcmeta(str) {
     try {
-        const d = JSON.parse(str);
+        const d = JSON.parse(str.trim()); // Trim to prevent Syntax Error
         d.pack.pack_format = 3;
-        if (state.options.packName) d.pack.description = state.options.packName;
+        if (state.options.packName) d.pack.description = state.options.packName + " (Tuff Client)";
         return JSON.stringify(d, null, 4);
-    } catch { return str; }
+    } catch (e) { return str; }
 }
 
 function updateProgress(p, m) {
     const fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = p + '%';
     const label = document.getElementById('progressLabel');
-    if(fill) fill.style.width = p + '%';
-    if(label) label.textContent = m;
-}
-
-function initializeUI() {
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    dropZone.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => handleFile(e.target.files[0]);
-    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
-    dropZone.ondrop = (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    };
-}
-
-function handleFile(file) {
-    if (!file || !file.name.endsWith('.zip')) return;
-    state.file = file;
-    document.getElementById('fileInfo').style.display = 'block';
-    document.getElementById('fileName').textContent = file.name;
-    document.getElementById('convertBtn').disabled = false;
+    if (label) label.textContent = m;
 }
 
 function loadOptions() {
