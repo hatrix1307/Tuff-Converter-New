@@ -13,7 +13,6 @@ const state = {
 
 // Folders to remove (non-texture content)
 const FOLDERS_TO_REMOVE = [
-    'blockstates',
     'models',
     'sounds',
     'lang',
