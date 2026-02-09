@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tuff Client Texture Converter - 1.21 → Tuff Client</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="grain-overlay"></div>
+    
+    <div class="container">
+        <header class="header">
+            <div class="logo-section">
+                <div class="pixel-icon">
+                    <div class="block"></div>
+                    <div class="block"></div>
+                    <div class="block"></div>
+                    <div class="block"></div>
+                </div>
+                <h1 class="title">
+                    <span class="title-main">TUFF CLIENT</span>
+                    <span class="title-sub">Texture Pack Converter</span>
+                </h1>
+            </div>
+            <div class="version-badge">
+                <span class="version-from">1.21</span>
+                <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                <span class="version-to">Tuff</span>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="upload-section">
+                <div class="upload-card" id="dropZone">
+                    <div class="upload-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
+                    <h2 class="upload-title">Drop your 1.21 Resource Pack</h2>
+                    <p class="upload-text">or click to browse</p>
+                    <input type="file" id="fileInput" accept=".zip" hidden>
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <span class="file-name" id="fileName"></span>
+                        <span class="file-size" id="fileSize"></span>
+                    </div>
+                </div>
+
+                <div class="options-card">
+                    <h3 class="options-title">Conversion Options</h3>
+                    
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="removeNonTextures" checked>
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">
+                                <strong>Remove Non-Textures</strong>
+                                <small>Removes models, blockstates, sounds, lang files</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="convertNewMobs">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">
+                                <strong>Include New Mobs</strong>
+                                <small>Keep Warden, Allay, Frog textures (experimental)</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="updateMcmeta" checked>
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">
+                                <strong>Update pack.mcmeta</strong>
+                                <small>Set description to "Just like the trailers!"</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="option-group">
+                        <label class="text-input-label">
+                            <strong>Custom Pack Name (optional)</strong>
+                            <input type="text" id="packName" class="text-input" placeholder="My Custom Pack">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button class="convert-btn" id="convertBtn" disabled>
+                <span class="btn-text">SELECT A FILE TO START</span>
+                <span class="btn-icon">⚡</span>
+            </button>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <span class="progress-label" id="progressLabel">Processing...</span>
+                        <span class="progress-percent" id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-details" id="progressDetails"></div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="info-card">
+                    <h3 class="info-title">📦 What This Does</h3>
+                    <ul class="info-list">
+                        <li>Converts 1.21 vanilla resource packs to Tuff Client format</li>
+                        <li>Removes unnecessary files (models, blockstates, sounds)</li>
+                        <li>Maintains texture compatibility with Tuff Client</li>
+                        <li>Preserves all block, item, and entity textures</li>
+                        <li>Updates pack metadata to match Tuff standards</li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <h3 class="info-title">⚠️ Important Notes</h3>
+                    <ul class="info-list">
+                        <li><strong>Client-side only:</strong> All processing happens in your browser</li>
+                        <li><strong>No upload:</strong> Your files never leave your computer</li>
+                        <li><strong>Texture style:</strong> This converter maintains original textures</li>
+                        <li><strong>Manual review:</strong> Always test the output in-game</li>
+                    </ul>
+                </div>
+
+                <div class="info-card warning-card">
+                    <h3 class="info-title">🎨 Style Conversion</h3>
+                    <p class="warning-text">
+                        This tool converts the <strong>structure</strong> of resource packs, not the art style. 
+                        To achieve the true "Bare Bones" minimalist aesthetic, textures would need to be 
+                        manually redrawn. This converter focuses on file organization and compatibility.
+                    </p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Made for the Tuff Network Community • Open Source on GitHub</p>
+            <p class="footer-small">Not affiliated with Mojang or Microsoft</p>
+        </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
