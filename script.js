@@ -282,7 +282,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         outputZip.file(newPath, content);
     };
     
-    // GRASS BLOCKS
+    // === GRASS BLOCKS ===
     if (path.endsWith('/block/grass_block_side_overlay.png')) {
         addDuplicate(originalPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'));
     }
@@ -296,7 +296,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'));
     }
     
-    // FARMLAND
+    // === FARMLAND ===
     if (path.endsWith('/block/farmland.png')) {
         addDuplicate(originalPath.replace(/farmland\.png$/i, 'farmland_dry.png'));
     }
@@ -304,7 +304,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'));
     }
     
-    // GRASS PATH
+    // === GRASS PATH ===
     if (path.endsWith('/block/dirt_path_top.png')) {
         addDuplicate(originalPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'));
     }
@@ -312,7 +312,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'));
     }
     
-    // WOOD TOOLS
+    // === WOOD TOOLS ===
     if (path.endsWith('/item/wooden_sword.png')) {
         addDuplicate(originalPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'));
     }
@@ -329,7 +329,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'));
     }
     
-    // GOLD TOOLS & ARMOR
+    // === GOLD TOOLS & ARMOR ===
     if (path.endsWith('/item/golden_sword.png')) {
         addDuplicate(originalPath.replace(/golden_sword\.png$/i, 'gold_sword.png'));
     }
@@ -361,7 +361,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
     }
     
-    // DYES
+    // === DYES (color_dye to dye_color) ===
     const dyeColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 
                        'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -371,7 +371,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // GLASS & GLASS PANES
+    // === GLASS & GLASS PANES (color_stained_glass to glass_color) ===
     const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                          'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -384,7 +384,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // WOOL
+    // === WOOL (color_wool to wool_colored_color) ===
     const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -394,7 +394,20 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // TERRACOTTA
+    // === CONCRETE (color_concrete to concrete_color) ===
+    const concreteColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
+                            'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of concreteColors) {
+        if (path.endsWith(`/block/${color}_concrete.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_concrete\\.png$`, 'i'), `concrete_${color}.png`));
+        }
+        if (path.endsWith(`/block/${color}_concrete_powder.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_concrete_powder\\.png$`, 'i'), `concrete_powder_${color}.png`));
+        }
+    }
+    
+    // === TERRACOTTA (color_terracotta to hardened_clay_stained_color) ===
     const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                               'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -408,7 +421,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
     }
     
-    // GLAZED TERRACOTTA
+    // === GLAZED TERRACOTTA (color_glazed_terracotta to glazed_terracotta_color) ===
     const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                           'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -418,7 +431,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // LOGS
+    // === LOGS (oak_log to log_oak) ===
     const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of logTypes) {
@@ -432,7 +445,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // PLANKS
+    // === PLANKS (oak_planks to planks_oak) ===
     const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of plankTypes) {
@@ -442,19 +455,100 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // NETHER QUARTZ
+    // === LEAVES (oak_leaves to leaves_oak) ===
+    const leafTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    
+    for (const wood of leafTypes) {
+        if (path.endsWith(`/block/${wood}_leaves.png`)) {
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_leaves\\.png$`, 'i'), `leaves_${legacyName}.png`));
+        }
+    }
+    
+    // === SAPLINGS (oak_sapling to sapling_oak) ===
+    const saplingTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    
+    for (const wood of saplingTypes) {
+        if (path.endsWith(`/block/${wood}_sapling.png`)) {
+            const legacyName = wood === 'dark_oak' ? 'roofed_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_sapling\\.png$`, 'i'), `sapling_${legacyName}.png`));
+        }
+    }
+    
+    // === ICE ===
+    if (path.endsWith('/block/packed_ice.png')) {
+        addDuplicate(originalPath.replace(/packed_ice\.png$/i, 'ice_packed.png'));
+    }
+    
+    // === NETHER PORTAL ===
+    if (path.endsWith('/block/nether_portal.png')) {
+        addDuplicate(originalPath.replace(/nether_portal\.png$/i, 'portal.png'));
+    }
+    if (path.endsWith('/block/nether_portal.png.mcmeta')) {
+        addDuplicate(originalPath.replace(/nether_portal\.png\.mcmeta$/i, 'portal.png.mcmeta'));
+    }
+    
+    // === NETHER QUARTZ ORE ===
     if (path.endsWith('/block/nether_quartz_ore.png')) {
         addDuplicate(originalPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'));
     }
     
-    // RED NETHER BRICK
+    // === RED NETHER BRICK ===
     if (path.endsWith('/block/red_nether_bricks.png')) {
         addDuplicate(originalPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'));
     }
     
-    // TOTEM
+    // === TOTEM ===
     if (path.endsWith('/item/totem_of_undying.png')) {
         addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
+    }
+    
+    // === DOORS (oak_door to door_wood, iron_door to door_iron) ===
+    if (path.endsWith('/block/oak_door_bottom.png')) {
+        addDuplicate(originalPath.replace(/oak_door_bottom\.png$/i, 'door_wood_lower.png'));
+    }
+    if (path.endsWith('/block/oak_door_top.png')) {
+        addDuplicate(originalPath.replace(/oak_door_top\.png$/i, 'door_wood_upper.png'));
+    }
+    if (path.endsWith('/block/iron_door_bottom.png')) {
+        addDuplicate(originalPath.replace(/iron_door_bottom\.png$/i, 'door_iron_lower.png'));
+    }
+    if (path.endsWith('/block/iron_door_top.png')) {
+        addDuplicate(originalPath.replace(/iron_door_top\.png$/i, 'door_iron_upper.png'));
+    }
+    
+    // === TALLGRASS / FERN ===
+    if (path.endsWith('/block/short_grass.png')) {
+        addDuplicate(originalPath.replace(/short_grass\.png$/i, 'tallgrass.png'));
+    }
+    if (path.endsWith('/block/fern.png')) {
+        addDuplicate(originalPath.replace(/fern\.png$/i, 'fern.png'));
+    }
+    
+    // === DEAD BUSH ===
+    if (path.endsWith('/block/dead_bush.png')) {
+        addDuplicate(originalPath.replace(/dead_bush\.png$/i, 'deadbush.png'));
+    }
+    
+    // === LILY PAD ===
+    if (path.endsWith('/block/lily_pad.png')) {
+        addDuplicate(originalPath.replace(/lily_pad\.png$/i, 'waterlily.png'));
+    }
+    
+    // === PUMPKIN STEM ===
+    if (path.endsWith('/block/pumpkin_stem.png')) {
+        addDuplicate(originalPath.replace(/pumpkin_stem\.png$/i, 'stem_pumpkin_disconnected.png'));
+    }
+    if (path.endsWith('/block/attached_pumpkin_stem.png')) {
+        addDuplicate(originalPath.replace(/attached_pumpkin_stem\.png$/i, 'stem_pumpkin_connected.png'));
+    }
+    
+    // === MELON STEM ===
+    if (path.endsWith('/block/melon_stem.png')) {
+        addDuplicate(originalPath.replace(/melon_stem\.png$/i, 'stem_melon_disconnected.png'));
+    }
+    if (path.endsWith('/block/attached_melon_stem.png')) {
+        addDuplicate(originalPath.replace(/attached_melon_stem\.png$/i, 'stem_melon_connected.png'));
     }
 }
 
