@@ -209,72 +209,76 @@ async function applyBlueTint(dataUrl) {
     });
 }
 
+// Helper to reliably load images from blobs
+function loadImageFromBlob(blob) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Image failed to load'));
+        img.src = URL.createObjectURL(blob);
+    });
+}
+
 // Create wallpaper from panorama images
 async function createWallpaperFromPanorama(outputZip, panorama0Blob, panorama1Blob) {
-    return new Promise((resolve) => {
-        const img0 = new Image();
-        const img1 = new Image();
-        let loaded = 0;
-        
-        const onBothLoaded = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1080;
-            canvas.height = 1920;
-            const ctx = canvas.getContext('2d');
-            
-            // Fill with black background
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, 1080, 1920);
-            
-            // Calculate scaling to fit 540x1920 for each half
-            const targetWidth = 540;
-            const targetHeight = 1920;
-            
-            // Draw panorama 0 on left half (0, 0, 540, 1920)
-            const scale0 = Math.max(targetWidth / img0.width, targetHeight / img0.height);
-            const scaledWidth0 = img0.width * scale0;
-            const scaledHeight0 = img0.height * scale0;
-            const x0 = (targetWidth - scaledWidth0) / 2;
-            const y0 = (targetHeight - scaledHeight0) / 2;
-            ctx.drawImage(img0, x0, y0, scaledWidth0, scaledHeight0);
-            
-            // Draw panorama 1 on right half (540, 0, 540, 1920)
-            const scale1 = Math.max(targetWidth / img1.width, targetHeight / img1.height);
-            const scaledWidth1 = img1.width * scale1;
-            const scaledHeight1 = img1.height * scale1;
-            const x1 = 540 + (targetWidth - scaledWidth1) / 2;
-            const y1 = (targetHeight - scaledHeight1) / 2;
-            ctx.drawImage(img1, x1, y1, scaledWidth1, scaledHeight1);
-            
-            // Convert to JPEG base64
+    try {
+        const [img0, img1] = await Promise.all([
+            loadImageFromBlob(panorama0Blob),
+            loadImageFromBlob(panorama1Blob)
+        ]);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext('2d');
+
+        // Fill with black background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 1080, 1920);
+
+        const targetWidth = 540;
+        const targetHeight = 1920;
+
+        // --- Draw panorama 0 on Left Half ---
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, 540, 1920);
+        ctx.clip(); // Locks drawing to the left side
+
+        const scale0 = Math.max(targetWidth / img0.width, targetHeight / img0.height);
+        const scaledWidth0 = img0.width * scale0;
+        const scaledHeight0 = img0.height * scale0;
+        const x0 = (targetWidth - scaledWidth0) / 2;
+        const y0 = (targetHeight - scaledHeight0) / 2;
+        ctx.drawImage(img0, x0, y0, scaledWidth0, scaledHeight0);
+        ctx.restore();
+
+        // --- Draw panorama 1 on Right Half ---
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(540, 0, 540, 1920);
+        ctx.clip(); // Locks drawing to the right side
+
+        const scale1 = Math.max(targetWidth / img1.width, targetHeight / img1.height);
+        const scaledWidth1 = img1.width * scale1;
+        const scaledHeight1 = img1.height * scale1;
+        const x1 = 540 + (targetWidth - scaledWidth1) / 2;
+        const y1 = (targetHeight - scaledHeight1) / 2;
+        ctx.drawImage(img1, x1, y1, scaledWidth1, scaledHeight1);
+        ctx.restore();
+
+        // Convert to JPEG base64 and add to JSZip
+        return new Promise((resolve) => {
             canvas.toBlob((blob) => {
-                outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
+                if (blob) {
+                    outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
+                }
                 resolve();
             }, 'image/jpeg', 0.9);
-        };
-        
-        img0.onload = () => {
-            loaded++;
-            if (loaded === 2) onBothLoaded();
-        };
-        
-        img1.onload = () => {
-            loaded++;
-            if (loaded === 2) onBothLoaded();
-        };
-        
-        img0.onerror = () => resolve(); // Skip if error
-        img1.onerror = () => resolve();
-        
-        // Load images from blobs
-        const reader0 = new FileReader();
-        reader0.onload = (e) => { img0.src = e.target.result; };
-        reader0.readAsDataURL(panorama0Blob);
-        
-        const reader1 = new FileReader();
-        reader1.onload = (e) => { img1.src = e.target.result; };
-        reader1.readAsDataURL(panorama1Blob);
-    });
+        });
+    } catch (error) {
+        console.warn('Failed to process panorama images:', error);
+    }
 }
 
 async function convertPack() {
@@ -369,6 +373,9 @@ async function convertPack() {
 
         updateProgress(75, 'Creating wallpaper...');
         
+        // Force create the directory structure so the tuff folder ALWAYS exists
+        outputZip.folder('assets/tuff/textures/ui/wallpaper');
+        
         // Create wallpaper from panorama images
         const panorama0Path = 'assets/minecraft/textures/gui/title/background/panorama_0.png';
         const panorama1Path = 'assets/minecraft/textures/gui/title/background/panorama_1.png';
@@ -384,6 +391,8 @@ async function convertPack() {
             } catch (error) {
                 console.warn('Could not create wallpaper:', error);
             }
+        } else {
+            console.log('Panorama images not found in zip. Defaulting to empty wallpaper folder.');
         }
 
         updateProgress(80, 'Finalizing conversion...');
