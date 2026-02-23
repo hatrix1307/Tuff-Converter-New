@@ -1,11 +1,8 @@
-/**
- * Tuff Client Universal Converter - Pro API Edition
- * Fixes: SyntaxError in Meta, Black Mobs, Leaf/Grass defaults, and Double Chests.
- */
+// Tuff Client Texture Pack Converter
+// Converts 1.21 vanilla resource packs to Tuff Client format
 
 const state = {
     file: null,
-    mappingData: {},
     options: {
         removeNonTextures: true,
         convertNewMobs: false,
@@ -14,226 +11,531 @@ const state = {
     }
 };
 
-// Official Mapping API sources (1.13+ Flattening)
-const API_SOURCES = [
-    "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/1.13/block_renames.json",
-    "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/1.13/item_renames.json"
+// Folders to remove (non-texture content)
+const FOLDERS_TO_REMOVE = [
+    'models',
+    'sounds',
+    'lang',
+    'advancements',
+    'loot_tables',
+    'recipes',
+    'structures',
+    'shaders',
+    'font',
+    'texts',
+    'eagler'
 ];
 
-const FOLDERS_TO_REMOVE = ['models', 'sounds', 'lang', 'advancements', 'loot_tables', 'recipes', 'structures', 'shaders', 'font', 'texts', 'eagler'];
+// Files to remove
+const FILES_TO_REMOVE = [
+    'sounds.json',
+    '.mcassetsroot'
+];
 
-// Initialize and Fetch API
-document.addEventListener('DOMContentLoaded', async () => {
-    initializeUI();
+// Files that exist in template but not in Tuff Client (to remove)
+const TEMPLATE_ONLY_FILES = [
+    'bamboo_bottom.png',
+    'bamboo_side.png',
+    'bamboo_top.png',
+    'bell_bottom.png',
+    'bell_side.png',
+    'bell_top.png',
+    'bush.png',
+    'cactus_flower.png',
+    'conduit.png'
+];
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    initializeEventListeners();
     loadOptions();
-    await fetchAndInvertMappings();
 });
 
-async function fetchAndInvertMappings() {
-    try {
-        for (const url of API_SOURCES) {
-            const resp = await fetch(url);
-            const data = await resp.json();
-            for (const [oldName, newName] of Object.entries(data)) {
-                // Invert the map: New Name (1.21) -> Old Name (1.12)
-                state.mappingData[newName.replace('minecraft:', '')] = oldName.replace('minecraft:', '');
-            }
-        }
-        console.log("✅ API Mapping Engine Ready");
-    } catch (e) {
-        console.error("❌ API Fetch failed. Ensure you have internet access.");
-    }
-}
-
-async function convertPack() {
-    if (!state.file) return;
-    const btn = document.getElementById('convertBtn');
-    btn.disabled = true;
-    document.getElementById('progressSection').style.display = 'block';
-
-    try {
-        updateProgress(5, 'Analyzing ZIP...');
-        const zip = await JSZip.loadAsync(state.file);
-        const outputZip = new JSZip();
-        const files = Object.keys(zip.files);
-        const chestParts = { normal: {}, trapped: {} };
-
-        for (let i = 0; i < files.length; i++) {
-            const path = files[i];
-            const file = zip.files[path];
-            if (file.dir || shouldSkip(path)) continue;
-
-            const content = await file.async('blob');
-            const pathLower = path.toLowerCase();
-
-            // 1. Capture Chests for Stitching (Fixes Double Chest texture)
-            if (pathLower.includes('entity/chest/')) {
-                const type = pathLower.includes('trapped') ? 'trapped' : 'normal';
-                if (pathLower.endsWith('left.png')) chestParts[type].left = content;
-                if (pathLower.endsWith('right.png')) chestParts[type].right = content;
-            }
-
-            // 2. Process Textures (API Rename + Entity Flattening)
-            if (pathLower.includes('assets/minecraft/textures/')) {
-                await processTexture(outputZip, path, content);
-            } 
-            // 3. Fix pack.mcmeta Syntax & Format
-            else if (pathLower.endsWith('pack.mcmeta')) {
-                const text = await file.async('string');
-                outputZip.file(path, modifyPackMcmeta(text));
-            } else {
-                outputZip.file(path, content);
-            }
-
-            if (i % 50 === 0) updateProgress(5 + (i / files.length * 85), 'Converting Assets...');
-        }
-
-        // 4. Final Logic: Stitch modern chest halves into 1.12 single file
-        updateProgress(92, 'Stitching Double Chests...');
-        await stitchDoubleChests(outputZip, chestParts);
-
-        updateProgress(95, 'Finalizing Pack...');
-        const blob = await outputZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        saveAs(blob, (state.options.packName || "Universal_Pack") + ".zip");
-        updateProgress(100, 'Conversion Successful!');
-        btn.disabled = false;
-    } catch (err) {
-        console.error(err);
-        updateProgress(0, 'Error: ' + err.message);
-        btn.disabled = false;
-    }
-}
-
-async function processTexture(zip, path, blob) {
-    const pathLower = path.toLowerCase();
-    
-    // REQUIREMENT: Keep the original 1.21 path for Universal compatibility
-    zip.file(path, blob);
-
-    const match = pathLower.match(/textures\/(.*)\.png$/);
-    if (!match) return;
-    const internal = match[1]; 
-    const folder = internal.split('/')[0]; 
-    const fileName = internal.split('/').pop();
-
-    let legacyPath = null;
-
-    // A. API MAPPING (Fixes Grass, Leaves, Farmland, etc.)
-    let legacyName = state.mappingData[fileName];
-    if (!legacyName) {
-        // Handle suffix-based renames (e.g., grass_block_side -> grass_side)
-        for (const [nKey, oVal] of Object.entries(state.mappingData)) {
-            if (fileName.startsWith(nKey + "_")) {
-                legacyName = oVal + fileName.slice(nKey.length);
-                break;
-            }
-        }
-    }
-
-    if (legacyName) {
-        const pluralFolder = folder === 'block' ? 'blocks' : (folder === 'item' ? 'items' : folder);
-        legacyPath = `assets/minecraft/textures/${pluralFolder}/${legacyName}.png`;
-    }
-
-    // B. ENTITY FLATTENING (Fixes Black Mobs)
-    else if (folder === 'entity') {
-        const parts = internal.split('/');
-        if (parts.length > 2) {
-            // Pulls texture out of subfolder: entity/creeper/creeper.png -> entity/creeper.png
-            legacyPath = `assets/minecraft/textures/entity/${parts[parts.length - 1]}.png`;
-        }
-    }
-
-    // C. SUFFIX REVERSAL (Leaves & Tools)
-    if (!legacyPath) {
-        if (fileName.includes('_leaves')) {
-            legacyPath = path.replace(/block\/(.*)_leaves\.png$/, 'blocks/leaves_$1.png');
-        } else if (fileName.startsWith('wooden_')) {
-            legacyPath = path.replace('wooden_', 'wood_').replace('/item/', '/items/');
-        }
-    }
-
-    // D. PLURALIZATION FALLBACK (block/ -> blocks/)
-    if (!legacyPath) {
-        legacyPath = path.replace('/textures/block/', '/textures/blocks/')
-                         .replace('/textures/item/', '/textures/items/');
-    }
-
-    if (legacyPath && legacyPath !== path) zip.file(legacyPath, blob);
-}
-
-// --- IMAGE STITCHING ENGINE ---
-async function stitchDoubleChests(zip, chestParts) {
-    for (const type of ['normal', 'trapped']) {
-        if (chestParts[type].left && chestParts[type].right) {
-            const stitched = await mergeChestImages(chestParts[type].left, chestParts[type].right);
-            const name = type === 'normal' ? 'normal_double.png' : 'trapped_double.png';
-            zip.file(`assets/minecraft/textures/entity/chest/${name}`, stitched);
-        }
-    }
-}
-
-async function mergeChestImages(left, right) {
-    return new Promise((res) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const imgL = new Image(), imgR = new Image();
-        imgL.onload = () => {
-            imgR.onload = () => {
-                canvas.width = imgL.width * 2; canvas.height = imgL.height;
-                ctx.drawImage(imgR, 0, 0); // 1.12 map order
-                ctx.drawImage(imgL, imgL.width, 0);
-                canvas.toBlob(res);
-            };
-            imgR.src = URL.createObjectURL(right);
-        };
-        imgL.src = URL.createObjectURL(left);
-    });
-}
-
-// --- UTILS & UI ---
-function modifyPackMcmeta(content) {
-    try {
-        // FIX: Trim leading characters that cause SyntaxError
-        const data = JSON.parse(content.trim().replace(/^\uFEFF/, ''));
-        data.pack.pack_format = 3; 
-        if (state.options.packName) data.pack.description = state.options.packName;
-        return JSON.stringify(data, null, 4);
-    } catch (error) {
-        console.warn('Metadata cleanup performed due to syntax error.');
-        return JSON.stringify({ "pack": { "description": "Converted Pack", "pack_format": 3 } }, null, 4);
-    }
-}
-
-function shouldSkip(path) {
-    const p = path.toLowerCase();
-    return state.options.removeNonTextures && FOLDERS_TO_REMOVE.some(f => p.includes(`/${f}/`));
-}
-
-function updateProgress(p, m) {
-    document.getElementById('progressFill').style.width = p + '%';
-    document.getElementById('progressLabel').textContent = m;
-}
-
-function initializeUI() {
+function initializeEventListeners() {
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
-    dropZone.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => handleFile(e.target.files[0]);
-    ['dragover', 'drop'].forEach(n => dropZone.addEventListener(n, (e) => {
-        e.preventDefault();
-        if (n === 'drop' && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    }));
+    const convertBtn = document.getElementById('convertBtn');
+
+    // File input
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFileSelect);
+
+    // Drag and drop
+    dropZone.addEventListener('dragover', handleDragOver);
+    dropZone.addEventListener('dragleave', handleDragLeave);
+    dropZone.addEventListener('drop', handleDrop);
+
+    // Options
+    document.getElementById('removeNonTextures').addEventListener('change', (e) => {
+        state.options.removeNonTextures = e.target.checked;
+        saveOptions();
+    });
+    document.getElementById('convertNewMobs').addEventListener('change', (e) => {
+        state.options.convertNewMobs = e.target.checked;
+        saveOptions();
+    });
+    document.getElementById('updateMcmeta').addEventListener('change', (e) => {
+        state.options.updateMcmeta = e.target.checked;
+        saveOptions();
+    });
+    document.getElementById('packName').addEventListener('input', (e) => {
+        state.options.packName = e.target.value;
+        saveOptions();
+    });
+
+    // Convert button
+    convertBtn.addEventListener('click', convertPack);
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].name.endsWith('.zip')) {
+        handleFile(files[0]);
+    } else {
+        alert('Please drop a .zip file');
+    }
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        handleFile(file);
+    }
 }
 
 function handleFile(file) {
     state.file = file;
+    
+    // Update UI
     document.getElementById('fileInfo').style.display = 'block';
     document.getElementById('fileName').textContent = file.name;
-    document.getElementById('convertBtn').disabled = false;
+    document.getElementById('fileSize').textContent = formatBytes(file.size);
+    
+    const convertBtn = document.getElementById('convertBtn');
+    convertBtn.disabled = false;
+    convertBtn.querySelector('.btn-text').textContent = 'CONVERT TO TUFF CLIENT';
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+async function convertPack() {
+    if (!state.file) return;
+
+    const progressSection = document.getElementById('progressSection');
+    const convertBtn = document.getElementById('convertBtn');
+    
+    // Show progress
+    progressSection.style.display = 'block';
+    convertBtn.disabled = true;
+    convertBtn.querySelector('.btn-text').textContent = 'CONVERTING...';
+
+    try {
+        updateProgress(0, 'Loading resource pack...');
+        
+        // Load the zip file
+        const zip = await JSZip.loadAsync(state.file);
+        updateProgress(10, 'Analyzing file structure...');
+
+        // Create output zip
+        const outputZip = new JSZip();
+        let processedFiles = 0;
+        const totalFiles = Object.keys(zip.files).length;
+
+        // Process each file
+        for (const [path, file] of Object.entries(zip.files)) {
+            processedFiles++;
+            const percent = 10 + Math.floor((processedFiles / totalFiles) * 70);
+            
+            if (processedFiles % 10 === 0) {
+                updateProgress(percent, `Processing files... (${processedFiles}/${totalFiles})`);
+                await sleep(0); // Allow UI to update
+            }
+
+            // Skip if it's a directory
+            if (file.dir) continue;
+
+            // Check if we should skip this file
+            if (shouldSkipFile(path)) {
+                continue;
+            }
+
+            // Special handling for pack.mcmeta
+            if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
+                const content = await file.async('string');
+                const modified = modifyPackMcmeta(content);
+                outputZip.file(path, modified);
+                continue;
+            }
+
+            // Get file content
+            const content = await file.async('blob');
+
+            // Add the original file
+            outputZip.file(path, content);
+
+            // Create legacy duplicates for compatibility
+            await createLegacyDuplicates(outputZip, path, content);
+        }
+
+        updateProgress(80, 'Finalizing conversion...');
+
+        // Generate the zip file
+        updateProgress(90, 'Generating download...');
+        const blob = await outputZip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        }, (metadata) => {
+            const percent = 90 + Math.floor(metadata.percent / 10);
+            updateProgress(percent, 'Compressing files...');
+        });
+
+        updateProgress(100, 'Complete! Downloading...');
+
+        // Download the file
+        const filename = state.options.packName 
+            ? `${state.options.packName}_TuffClient.zip`
+            : state.file.name.replace('.zip', '_TuffClient.zip');
+        
+        saveAs(blob, filename);
+
+        // Success message
+        setTimeout(() => {
+            updateProgress(100, '✅ Conversion complete! Check your downloads.');
+            convertBtn.querySelector('.btn-text').textContent = 'CONVERT ANOTHER PACK';
+            convertBtn.disabled = false;
+        }, 500);
+
+    } catch (error) {
+        console.error('Conversion error:', error);
+        updateProgress(0, `❌ Error: ${error.message}`);
+        convertBtn.querySelector('.btn-text').textContent = 'TRY AGAIN';
+        convertBtn.disabled = false;
+    }
+}
+
+function shouldSkipFile(path) {
+    const pathLower = path.toLowerCase();
+
+    // Skip files in folders to remove
+    if (state.options.removeNonTextures) {
+        for (const folder of FOLDERS_TO_REMOVE) {
+            if (pathLower.includes(`/${folder}/`) || pathLower.includes(`\\${folder}\\`)) {
+                return true;
+            }
+        }
+
+        // Skip specific files
+        for (const file of FILES_TO_REMOVE) {
+            if (pathLower.endsWith(file)) {
+                return true;
+            }
+        }
+    }
+
+    // Skip template-only files
+    const filename = path.split('/').pop();
+    if (TEMPLATE_ONLY_FILES.includes(filename)) {
+        return true;
+    }
+
+    // Only skip specific new mob textures if option is disabled
+    if (!state.options.convertNewMobs && pathLower.includes('entity/')) {
+        const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer'];
+        for (const mob of newMobs) {
+            if (pathLower.includes(mob)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+async function createLegacyDuplicates(outputZip, originalPath, content) {
+    const path = originalPath.toLowerCase();
+    
+    // Helper function to add duplicate
+    const addDuplicate = (newPath) => {
+        outputZip.file(newPath, content);
+    };
+    
+    // GRASS BLOCKS
+    if (path.endsWith('/block/grass_block_side_overlay.png')) {
+        addDuplicate(originalPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'));
+    }
+    if (path.endsWith('/block/grass_block_side.png')) {
+        addDuplicate(originalPath.replace(/grass_block_side\.png$/i, 'grass_side.png'));
+    }
+    if (path.endsWith('/block/grass_block_top.png')) {
+        addDuplicate(originalPath.replace(/grass_block_top\.png$/i, 'grass_top.png'));
+    }
+    if (path.endsWith('/block/grass_block_snow.png')) {
+        addDuplicate(originalPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'));
+    }
+    
+    // FARMLAND
+    if (path.endsWith('/block/farmland.png')) {
+        addDuplicate(originalPath.replace(/farmland\.png$/i, 'farmland_dry.png'));
+    }
+    if (path.endsWith('/block/farmland_moist.png')) {
+        addDuplicate(originalPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'));
+    }
+    
+    // GRASS PATH
+    if (path.endsWith('/block/dirt_path_top.png')) {
+        addDuplicate(originalPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'));
+    }
+    if (path.endsWith('/block/dirt_path_side.png')) {
+        addDuplicate(originalPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'));
+    }
+    
+    // WOOD TOOLS
+    if (path.endsWith('/item/wooden_sword.png')) {
+        addDuplicate(originalPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'));
+    }
+    if (path.endsWith('/item/wooden_pickaxe.png')) {
+        addDuplicate(originalPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'));
+    }
+    if (path.endsWith('/item/wooden_axe.png')) {
+        addDuplicate(originalPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'));
+    }
+    if (path.endsWith('/item/wooden_shovel.png')) {
+        addDuplicate(originalPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'));
+    }
+    if (path.endsWith('/item/wooden_hoe.png')) {
+        addDuplicate(originalPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'));
+    }
+    
+    // GOLD TOOLS & ARMOR
+    if (path.endsWith('/item/golden_sword.png')) {
+        addDuplicate(originalPath.replace(/golden_sword\.png$/i, 'gold_sword.png'));
+    }
+    if (path.endsWith('/item/golden_pickaxe.png')) {
+        addDuplicate(originalPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'));
+    }
+    if (path.endsWith('/item/golden_axe.png')) {
+        addDuplicate(originalPath.replace(/golden_axe\.png$/i, 'gold_axe.png'));
+    }
+    if (path.endsWith('/item/golden_shovel.png')) {
+        addDuplicate(originalPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'));
+    }
+    if (path.endsWith('/item/golden_hoe.png')) {
+        addDuplicate(originalPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'));
+    }
+    if (path.endsWith('/item/golden_helmet.png')) {
+        addDuplicate(originalPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'));
+    }
+    if (path.endsWith('/item/golden_chestplate.png')) {
+        addDuplicate(originalPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'));
+    }
+    if (path.endsWith('/item/golden_leggings.png')) {
+        addDuplicate(originalPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'));
+    }
+    if (path.endsWith('/item/golden_boots.png')) {
+        addDuplicate(originalPath.replace(/golden_boots\.png$/i, 'gold_boots.png'));
+    }
+    if (path.endsWith('/item/golden_apple.png')) {
+        addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
+    }
+    
+    // DYES
+    const dyeColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 
+                       'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of dyeColors) {
+        if (path.endsWith(`/item/${color}_dye.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_dye\\.png$`, 'i'), `dye_${color}.png`));
+        }
+    }
+    
+    // GLASS & GLASS PANES
+    const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
+                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of glassColors) {
+        if (path.endsWith(`/block/${color}_stained_glass.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass\\.png$`, 'i'), `glass_${color}.png`));
+        }
+        if (path.endsWith(`/block/${color}_stained_glass_pane_top.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass_pane_top\\.png$`, 'i'), `glass_pane_top_${color}.png`));
+        }
+    }
+    
+    // WOOL
+    const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
+                        'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of woolColors) {
+        if (path.endsWith(`/block/${color}_wool.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_wool\\.png$`, 'i'), `wool_colored_${color}.png`));
+        }
+    }
+    
+    // TERRACOTTA
+    const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
+                              'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of terracottaColors) {
+        if (path.endsWith(`/block/${color}_terracotta.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_terracotta\\.png$`, 'i'), `hardened_clay_stained_${color}.png`));
+        }
+    }
+    
+    if (path.endsWith('/block/terracotta.png')) {
+        addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
+    }
+    
+    // GLAZED TERRACOTTA
+    const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
+                          'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+    
+    for (const color of glazedColors) {
+        if (path.endsWith(`/block/${color}_glazed_terracotta.png`)) {
+            addDuplicate(originalPath.replace(new RegExp(`${color}_glazed_terracotta\\.png$`, 'i'), `glazed_terracotta_${color}.png`));
+        }
+    }
+    
+    // LOGS
+    const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    
+    for (const wood of logTypes) {
+        if (path.endsWith(`/block/${wood}_log.png`)) {
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_log\\.png$`, 'i'), `log_${legacyName}.png`));
+        }
+        if (path.endsWith(`/block/${wood}_log_top.png`)) {
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_log_top\\.png$`, 'i'), `log_${legacyName}_top.png`));
+        }
+    }
+    
+    // PLANKS
+    const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    
+    for (const wood of plankTypes) {
+        if (path.endsWith(`/block/${wood}_planks.png`)) {
+            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_planks\\.png$`, 'i'), `planks_${legacyName}.png`));
+        }
+    }
+    
+    // NETHER QUARTZ
+    if (path.endsWith('/block/nether_quartz_ore.png')) {
+        addDuplicate(originalPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'));
+    }
+    
+    // RED NETHER BRICK
+    if (path.endsWith('/block/red_nether_bricks.png')) {
+        addDuplicate(originalPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'));
+    }
+    
+    // TOTEM
+    if (path.endsWith('/item/totem_of_undying.png')) {
+        addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
+    }
+}
+
+function modifyPackMcmeta(content) {
+    try {
+        const data = JSON.parse(content);
+        
+        // Only update description if custom pack name is provided
+        if (state.options.packName) {
+            data.pack.description = `${state.options.packName} - Tuff Client Edition`;
+        }
+        
+        // Ensure pack format is 3 (1.11-1.12.x)
+        data.pack.pack_format = 3;
+
+        return JSON.stringify(data, null, 4);
+    } catch (error) {
+        console.error('Error modifying pack.mcmeta:', error);
+        return content;
+    }
+}
+
+function updateProgress(percent, message) {
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressDetails = document.getElementById('progressDetails');
+
+    progressFill.style.width = `${percent}%`;
+    progressPercent.textContent = `${percent}%`;
+    progressLabel.textContent = message;
+    
+    if (percent === 100) {
+        progressDetails.textContent = '🎉 Your Tuff Client texture pack is ready!';
+    } else {
+        progressDetails.textContent = `Processing your resource pack...`;
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function saveOptions() {
+    localStorage.setItem('tuffConverterOptions', JSON.stringify(state.options));
 }
 
 function loadOptions() {
-    const saved = localStorage.getItem('tuff_cfg');
-    if (saved) state.options = JSON.parse(saved);
+    const saved = localStorage.getItem('tuffConverterOptions');
+    if (saved) {
+        try {
+            const options = JSON.parse(saved);
+            state.options = { ...state.options, ...options };
+            
+            // Update UI
+            document.getElementById('removeNonTextures').checked = state.options.removeNonTextures;
+            document.getElementById('convertNewMobs').checked = state.options.convertNewMobs;
+            document.getElementById('updateMcmeta').checked = state.options.updateMcmeta;
+            document.getElementById('packName').value = state.options.packName;
+        } catch (error) {
+            console.error('Error loading options:', error);
+        }
+    }
 }
+
+// Utility: Check if browser supports required features
+function checkBrowserSupport() {
+    if (typeof JSZip === 'undefined') {
+        alert('JSZip library failed to load. Please refresh the page.');
+        return false;
+    }
+    if (typeof saveAs === 'undefined') {
+        alert('FileSaver library failed to load. Please refresh the page.');
+        return false;
+    }
+    return true;
+}
+
+// Check on load
+window.addEventListener('load', () => {
+    if (!checkBrowserSupport()) {
+        document.getElementById('convertBtn').disabled = true;
+    }
+});
