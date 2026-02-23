@@ -140,6 +140,75 @@ function formatBytes(bytes) {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
+// Helper function to convert blob to data URL
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+// Apply blue tint to grayscale water texture
+async function applyBlueTint(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            
+            // Draw original image
+            ctx.drawImage(img, 0, 0);
+            
+            // Get image data
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Check if image is grayscale (first 100 pixels)
+            let isGrayscale = true;
+            for (let i = 0; i < Math.min(100 * 4, data.length); i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                if (Math.abs(r - g) > 10 || Math.abs(g - b) > 10 || Math.abs(r - b) > 10) {
+                    isGrayscale = false;
+                    break;
+                }
+            }
+            
+            // If grayscale, apply blue tint
+            if (isGrayscale) {
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i]; // R, G, B are same in grayscale
+                    const alpha = data[i + 3];
+                    
+                    // Apply blue tint: keep brightness but make it blue
+                    // Blue water color: approximately RGB(63, 118, 228)
+                    const brightness = gray / 255;
+                    data[i] = Math.floor(63 * brightness);     // R
+                    data[i + 1] = Math.floor(118 * brightness); // G  
+                    data[i + 2] = Math.floor(228 * brightness); // B
+                    data[i + 3] = alpha; // Keep original alpha
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Convert to base64 PNG
+                const base64 = canvas.toDataURL('image/png').split(',')[1];
+                resolve(base64);
+            } else {
+                // Not grayscale, return null (keep original)
+                resolve(null);
+            }
+        };
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+    });
+}
+
 async function convertPack() {
     if (!state.file) return;
 
@@ -166,7 +235,7 @@ async function convertPack() {
         // Process each file
         for (const [path, file] of Object.entries(zip.files)) {
             processedFiles++;
-            const percent = 10 + Math.floor((processedFiles / totalFiles) * 70);
+            const percent = 10 + Math.floor((processedFiles / totalFiles) * 60);
             
             if (processedFiles % 10 === 0) {
                 updateProgress(percent, `Processing files... (${processedFiles}/${totalFiles})`);
@@ -197,6 +266,37 @@ async function convertPack() {
 
             // Create legacy duplicates for compatibility
             await createLegacyDuplicates(outputZip, path, content);
+        }
+
+        updateProgress(70, 'Processing water textures...');
+
+        // Process water textures - apply blue tint if grayscale
+        const waterStillPath = 'assets/minecraft/textures/block/water_still.png';
+        const waterFlowPath = 'assets/minecraft/textures/block/water_flow.png';
+        
+        for (const waterPath of [waterStillPath, waterFlowPath]) {
+            const waterFile = outputZip.file(waterPath);
+            if (waterFile) {
+                try {
+                    const waterBlob = await waterFile.async('blob');
+                    const waterDataUrl = await blobToDataURL(waterBlob);
+                    
+                    // Check if image is grayscale and apply blue tint
+                    const tintedWater = await applyBlueTint(waterDataUrl);
+                    if (tintedWater) {
+                        outputZip.file(waterPath, tintedWater, {base64: true});
+                    }
+                } catch (error) {
+                    console.warn('Could not process water texture:', error);
+                }
+            }
+        }
+        
+        // Add missing water animation metadata if needed
+        const waterMcmetaPath = 'assets/minecraft/textures/block/water_still.png.mcmeta';
+        if (outputZip.file(waterStillPath) && !outputZip.file(waterMcmetaPath)) {
+            const waterMcmeta = { animation: { frametime: 2 } };
+            outputZip.file(waterMcmetaPath, JSON.stringify(waterMcmeta, null, 2));
         }
 
         updateProgress(80, 'Finalizing conversion...');
@@ -475,6 +575,25 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
+    // === PODZOL ===
+    if (path.endsWith('/block/podzol_top.png')) {
+        addDuplicate(originalPath.replace(/podzol_top\.png$/i, 'dirt_podzol_top.png'));
+    }
+    if (path.endsWith('/block/podzol_side.png')) {
+        addDuplicate(originalPath.replace(/podzol_side\.png$/i, 'dirt_podzol_side.png'));
+    }
+    
+    // === END PORTAL FRAME ===
+    if (path.endsWith('/block/end_portal_frame_top.png')) {
+        addDuplicate(originalPath.replace(/end_portal_frame_top\.png$/i, 'endframe_top.png'));
+    }
+    if (path.endsWith('/block/end_portal_frame_side.png')) {
+        addDuplicate(originalPath.replace(/end_portal_frame_side\.png$/i, 'endframe_side.png'));
+    }
+    if (path.endsWith('/block/end_portal_frame_eye.png')) {
+        addDuplicate(originalPath.replace(/end_portal_frame_eye\.png$/i, 'endframe_eye.png'));
+    }
+    
     // === ICE ===
     if (path.endsWith('/block/packed_ice.png')) {
         addDuplicate(originalPath.replace(/packed_ice\.png$/i, 'ice_packed.png'));
@@ -520,9 +639,6 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
     // === TALLGRASS / FERN ===
     if (path.endsWith('/block/short_grass.png')) {
         addDuplicate(originalPath.replace(/short_grass\.png$/i, 'tallgrass.png'));
-    }
-    if (path.endsWith('/block/fern.png')) {
-        addDuplicate(originalPath.replace(/fern\.png$/i, 'fern.png'));
     }
     
     // === DEAD BUSH ===
