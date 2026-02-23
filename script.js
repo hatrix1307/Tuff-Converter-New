@@ -209,6 +209,74 @@ async function applyBlueTint(dataUrl) {
     });
 }
 
+// Create wallpaper from panorama images
+async function createWallpaperFromPanorama(outputZip, panorama0Blob, panorama1Blob) {
+    return new Promise((resolve) => {
+        const img0 = new Image();
+        const img1 = new Image();
+        let loaded = 0;
+        
+        const onBothLoaded = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1080;
+            canvas.height = 1920;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill with black background
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 1080, 1920);
+            
+            // Calculate scaling to fit 540x1920 for each half
+            const targetWidth = 540;
+            const targetHeight = 1920;
+            
+            // Draw panorama 0 on left half (0, 0, 540, 1920)
+            const scale0 = Math.max(targetWidth / img0.width, targetHeight / img0.height);
+            const scaledWidth0 = img0.width * scale0;
+            const scaledHeight0 = img0.height * scale0;
+            const x0 = (targetWidth - scaledWidth0) / 2;
+            const y0 = (targetHeight - scaledHeight0) / 2;
+            ctx.drawImage(img0, x0, y0, scaledWidth0, scaledHeight0);
+            
+            // Draw panorama 1 on right half (540, 0, 540, 1920)
+            const scale1 = Math.max(targetWidth / img1.width, targetHeight / img1.height);
+            const scaledWidth1 = img1.width * scale1;
+            const scaledHeight1 = img1.height * scale1;
+            const x1 = 540 + (targetWidth - scaledWidth1) / 2;
+            const y1 = (targetHeight - scaledHeight1) / 2;
+            ctx.drawImage(img1, x1, y1, scaledWidth1, scaledHeight1);
+            
+            // Convert to JPEG base64
+            canvas.toBlob((blob) => {
+                outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
+                resolve();
+            }, 'image/jpeg', 0.9);
+        };
+        
+        img0.onload = () => {
+            loaded++;
+            if (loaded === 2) onBothLoaded();
+        };
+        
+        img1.onload = () => {
+            loaded++;
+            if (loaded === 2) onBothLoaded();
+        };
+        
+        img0.onerror = () => resolve(); // Skip if error
+        img1.onerror = () => resolve();
+        
+        // Load images from blobs
+        const reader0 = new FileReader();
+        reader0.onload = (e) => { img0.src = e.target.result; };
+        reader0.readAsDataURL(panorama0Blob);
+        
+        const reader1 = new FileReader();
+        reader1.onload = (e) => { img1.src = e.target.result; };
+        reader1.readAsDataURL(panorama1Blob);
+    });
+}
+
 async function convertPack() {
     if (!state.file) return;
 
@@ -235,7 +303,7 @@ async function convertPack() {
         // Process each file
         for (const [path, file] of Object.entries(zip.files)) {
             processedFiles++;
-            const percent = 10 + Math.floor((processedFiles / totalFiles) * 60);
+            const percent = 10 + Math.floor((processedFiles / totalFiles) * 55);
             
             if (processedFiles % 10 === 0) {
                 updateProgress(percent, `Processing files... (${processedFiles}/${totalFiles})`);
@@ -268,7 +336,7 @@ async function convertPack() {
             await createLegacyDuplicates(outputZip, path, content);
         }
 
-        updateProgress(70, 'Processing water textures...');
+        updateProgress(65, 'Processing water textures...');
 
         // Process water textures - apply blue tint if grayscale
         const waterStillPath = 'assets/minecraft/textures/block/water_still.png';
@@ -297,6 +365,25 @@ async function convertPack() {
         if (outputZip.file(waterStillPath) && !outputZip.file(waterMcmetaPath)) {
             const waterMcmeta = { animation: { frametime: 2 } };
             outputZip.file(waterMcmetaPath, JSON.stringify(waterMcmeta, null, 2));
+        }
+
+        updateProgress(75, 'Creating wallpaper...');
+        
+        // Create wallpaper from panorama images
+        const panorama0Path = 'assets/minecraft/textures/gui/title/background/panorama_0.png';
+        const panorama1Path = 'assets/minecraft/textures/gui/title/background/panorama_1.png';
+        
+        const panorama0File = outputZip.file(panorama0Path);
+        const panorama1File = outputZip.file(panorama1Path);
+        
+        if (panorama0File && panorama1File) {
+            try {
+                const panorama0Blob = await panorama0File.async('blob');
+                const panorama1Blob = await panorama1File.async('blob');
+                await createWallpaperFromPanorama(outputZip, panorama0Blob, panorama1Blob);
+            } catch (error) {
+                console.warn('Could not create wallpaper:', error);
+            }
         }
 
         updateProgress(80, 'Finalizing conversion...');
