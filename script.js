@@ -1,8 +1,9 @@
 // Tuff Client Texture Pack Converter
-// Converts 1.21 vanilla resource packs to Tuff Client format
+// Merges 1.12 reference pack with 1.21 source pack
 
 const state = {
-    file: null,
+    file112: null,
+    file121: null,
     options: {
         removeNonTextures: true,
         convertNewMobs: false,
@@ -45,6 +46,28 @@ const TEMPLATE_ONLY_FILES = [
     'conduit.png'
 ];
 
+// Files to take from 1.12 reference pack (better quality/animated)
+const PREFER_112_FILES = [
+    // Animated textures
+    'assets/minecraft/textures/block/water_still.png',
+    'assets/minecraft/textures/block/water_still.png.mcmeta',
+    'assets/minecraft/textures/block/water_flow.png',
+    'assets/minecraft/textures/block/water_flow.png.mcmeta',
+    'assets/minecraft/textures/block/lava_still.png',
+    'assets/minecraft/textures/block/lava_still.png.mcmeta',
+    'assets/minecraft/textures/block/lava_flow.png',
+    'assets/minecraft/textures/block/lava_flow.png.mcmeta',
+    // Legacy entity textures
+    'assets/minecraft/textures/entity/alex.png',
+    'assets/minecraft/textures/entity/arrow.png',
+    'assets/minecraft/textures/entity/iron_golem.png',
+    'assets/minecraft/textures/entity/sign.png',
+    'assets/minecraft/textures/entity/snowman.png',
+    // GUI elements that are better in 1.12
+    'assets/minecraft/textures/gui/book.png',
+    'assets/minecraft/textures/gui/recipe_book.png',
+];
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
@@ -52,18 +75,27 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeEventListeners() {
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
+    const dropZone112 = document.getElementById('dropZone112');
+    const dropZone121 = document.getElementById('dropZone121');
+    const fileInput112 = document.getElementById('fileInput112');
+    const fileInput121 = document.getElementById('fileInput121');
     const convertBtn = document.getElementById('convertBtn');
 
-    // File input
-    dropZone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', handleFileSelect);
+    // File inputs
+    dropZone112.addEventListener('click', () => fileInput112.click());
+    dropZone121.addEventListener('click', () => fileInput121.click());
+    fileInput112.addEventListener('change', (e) => handleFileSelect(e, '112'));
+    fileInput121.addEventListener('change', (e) => handleFileSelect(e, '121'));
 
-    // Drag and drop
-    dropZone.addEventListener('dragover', handleDragOver);
-    dropZone.addEventListener('dragleave', handleDragLeave);
-    dropZone.addEventListener('drop', handleDrop);
+    // Drag and drop for 1.12
+    dropZone112.addEventListener('dragover', handleDragOver);
+    dropZone112.addEventListener('dragleave', handleDragLeave);
+    dropZone112.addEventListener('drop', (e) => handleDrop(e, '112'));
+
+    // Drag and drop for 1.21
+    dropZone121.addEventListener('dragover', handleDragOver);
+    dropZone121.addEventListener('dragleave', handleDragLeave);
+    dropZone121.addEventListener('drop', (e) => handleDrop(e, '121'));
 
     // Options
     document.getElementById('removeNonTextures').addEventListener('change', (e) => {
@@ -99,37 +131,47 @@ function handleDragLeave(e) {
     e.currentTarget.classList.remove('drag-over');
 }
 
-function handleDrop(e) {
+function handleDrop(e, version) {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
 
     const files = e.dataTransfer.files;
     if (files.length > 0 && files[0].name.endsWith('.zip')) {
-        handleFile(files[0]);
+        handleFile(files[0], version);
     } else {
         alert('Please drop a .zip file');
     }
 }
 
-function handleFileSelect(e) {
+function handleFileSelect(e, version) {
     const file = e.target.files[0];
     if (file) {
-        handleFile(file);
+        handleFile(file, version);
     }
 }
 
-function handleFile(file) {
-    state.file = file;
+function handleFile(file, version) {
+    if (version === '112') {
+        state.file112 = file;
+        document.getElementById('fileInfo112').style.display = 'block';
+        document.getElementById('fileName112').textContent = file.name;
+        document.getElementById('fileSize112').textContent = formatBytes(file.size);
+        document.getElementById('dropZone112').classList.add('has-file');
+    } else {
+        state.file121 = file;
+        document.getElementById('fileInfo121').style.display = 'block';
+        document.getElementById('fileName121').textContent = file.name;
+        document.getElementById('fileSize121').textContent = formatBytes(file.size);
+        document.getElementById('dropZone121').classList.add('has-file');
+    }
     
-    // Update UI
-    document.getElementById('fileInfo').style.display = 'block';
-    document.getElementById('fileName').textContent = file.name;
-    document.getElementById('fileSize').textContent = formatBytes(file.size);
-    
+    // Enable convert button if both files are loaded
     const convertBtn = document.getElementById('convertBtn');
-    convertBtn.disabled = false;
-    convertBtn.querySelector('.btn-text').textContent = 'CONVERT TO TUFF CLIENT';
+    if (state.file112 && state.file121) {
+        convertBtn.disabled = false;
+        convertBtn.querySelector('.btn-text').textContent = 'CONVERT TO TUFF CLIENT';
+    }
 }
 
 function formatBytes(bytes) {
@@ -150,139 +192,76 @@ function blobToDataURL(blob) {
     });
 }
 
-// Apply blue tint to grayscale water texture
-async function applyBlueTint(dataUrl) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            
-            // Draw original image
-            ctx.drawImage(img, 0, 0);
-            
-            // Get image data
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            // Check if image is grayscale (first 100 pixels)
-            let isGrayscale = true;
-            for (let i = 0; i < Math.min(100 * 4, data.length); i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                if (Math.abs(r - g) > 10 || Math.abs(g - b) > 10 || Math.abs(r - b) > 10) {
-                    isGrayscale = false;
-                    break;
-                }
-            }
-            
-            // If grayscale, apply blue tint
-            if (isGrayscale) {
-                for (let i = 0; i < data.length; i += 4) {
-                    const gray = data[i]; // R, G, B are same in grayscale
-                    const alpha = data[i + 3];
-                    
-                    // Apply blue tint: keep brightness but make it blue
-                    // Blue water color: approximately RGB(63, 118, 228)
-                    const brightness = gray / 255;
-                    data[i] = Math.floor(63 * brightness);     // R
-                    data[i + 1] = Math.floor(118 * brightness); // G  
-                    data[i + 2] = Math.floor(228 * brightness); // B
-                    data[i + 3] = alpha; // Keep original alpha
-                }
-                
-                ctx.putImageData(imageData, 0, 0);
-                
-                // Convert to base64 PNG
-                const base64 = canvas.toDataURL('image/png').split(',')[1];
-                resolve(base64);
-            } else {
-                // Not grayscale, return null (keep original)
-                resolve(null);
-            }
-        };
-        img.onerror = () => resolve(null);
-        img.src = dataUrl;
-    });
-}
-
-// Helper to reliably load images from blobs
-function loadImageFromBlob(blob) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('Image failed to load'));
-        img.src = URL.createObjectURL(blob);
-    });
-}
-
 // Create wallpaper from panorama images
 async function createWallpaperFromPanorama(outputZip, panorama0Blob, panorama1Blob) {
-    try {
-        const [img0, img1] = await Promise.all([
-            loadImageFromBlob(panorama0Blob),
-            loadImageFromBlob(panorama1Blob)
-        ]);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 1080;
-        canvas.height = 1920;
-        const ctx = canvas.getContext('2d');
-
-        // Fill with black background
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, 1080, 1920);
-
-        const targetWidth = 540;
-        const targetHeight = 1920;
-
-        // --- Draw panorama 0 on Left Half ---
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, 540, 1920);
-        ctx.clip(); // Locks drawing to the left side
-
-        const scale0 = Math.max(targetWidth / img0.width, targetHeight / img0.height);
-        const scaledWidth0 = img0.width * scale0;
-        const scaledHeight0 = img0.height * scale0;
-        const x0 = (targetWidth - scaledWidth0) / 2;
-        const y0 = (targetHeight - scaledHeight0) / 2;
-        ctx.drawImage(img0, x0, y0, scaledWidth0, scaledHeight0);
-        ctx.restore();
-
-        // --- Draw panorama 1 on Right Half ---
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(540, 0, 540, 1920);
-        ctx.clip(); // Locks drawing to the right side
-
-        const scale1 = Math.max(targetWidth / img1.width, targetHeight / img1.height);
-        const scaledWidth1 = img1.width * scale1;
-        const scaledHeight1 = img1.height * scale1;
-        const x1 = 540 + (targetWidth - scaledWidth1) / 2;
-        const y1 = (targetHeight - scaledHeight1) / 2;
-        ctx.drawImage(img1, x1, y1, scaledWidth1, scaledHeight1);
-        ctx.restore();
-
-        // Convert to JPEG base64 and add to JSZip
-        return new Promise((resolve) => {
+    return new Promise((resolve) => {
+        const img0 = new Image();
+        const img1 = new Image();
+        let loaded = 0;
+        
+        const onBothLoaded = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1080;
+            canvas.height = 1920;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill with black background
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 1080, 1920);
+            
+            // Calculate scaling to fit 540x1920 for each half
+            const targetWidth = 540;
+            const targetHeight = 1920;
+            
+            // Draw panorama 0 on left half (0, 0, 540, 1920)
+            const scale0 = Math.max(targetWidth / img0.width, targetHeight / img0.height);
+            const scaledWidth0 = img0.width * scale0;
+            const scaledHeight0 = img0.height * scale0;
+            const x0 = (targetWidth - scaledWidth0) / 2;
+            const y0 = (targetHeight - scaledHeight0) / 2;
+            ctx.drawImage(img0, x0, y0, scaledWidth0, scaledHeight0);
+            
+            // Draw panorama 1 on right half (540, 0, 540, 1920)
+            const scale1 = Math.max(targetWidth / img1.width, targetHeight / img1.height);
+            const scaledWidth1 = img1.width * scale1;
+            const scaledHeight1 = img1.height * scale1;
+            const x1 = 540 + (targetWidth - scaledWidth1) / 2;
+            const y1 = (targetHeight - scaledHeight1) / 2;
+            ctx.drawImage(img1, x1, y1, scaledWidth1, scaledHeight1);
+            
+            // Convert to JPEG base64
             canvas.toBlob((blob) => {
-                if (blob) {
-                    outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
-                }
+                outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
                 resolve();
             }, 'image/jpeg', 0.9);
-        });
-    } catch (error) {
-        console.warn('Failed to process panorama images:', error);
-    }
+        };
+        
+        img0.onload = () => {
+            loaded++;
+            if (loaded === 2) onBothLoaded();
+        };
+        
+        img1.onload = () => {
+            loaded++;
+            if (loaded === 2) onBothLoaded();
+        };
+        
+        img0.onerror = () => resolve(); // Skip if error
+        img1.onerror = () => resolve();
+        
+        // Load images from blobs
+        const reader0 = new FileReader();
+        reader0.onload = (e) => { img0.src = e.target.result; };
+        reader0.readAsDataURL(panorama0Blob);
+        
+        const reader1 = new FileReader();
+        reader1.onload = (e) => { img1.src = e.target.result; };
+        reader1.readAsDataURL(panorama1Blob);
+    });
 }
 
 async function convertPack() {
-    if (!state.file) return;
+    if (!state.file112 || !state.file121) return;
 
     const progressSection = document.getElementById('progressSection');
     const convertBtn = document.getElementById('convertBtn');
@@ -293,34 +272,34 @@ async function convertPack() {
     convertBtn.querySelector('.btn-text').textContent = 'CONVERTING...';
 
     try {
-        updateProgress(0, 'Loading resource pack...');
+        updateProgress(0, 'Loading 1.12 reference pack...');
+        const zip112 = await JSZip.loadAsync(state.file112);
         
-        // Load the zip file
-        const zip = await JSZip.loadAsync(state.file);
-        updateProgress(10, 'Analyzing file structure...');
+        updateProgress(5, 'Loading 1.21 source pack...');
+        const zip121 = await JSZip.loadAsync(state.file121);
+        
+        updateProgress(10, 'Analyzing file structures...');
 
         // Create output zip
         const outputZip = new JSZip();
         let processedFiles = 0;
-        const totalFiles = Object.keys(zip.files).length;
+        const totalFiles = Object.keys(zip121.files).length + PREFER_112_FILES.length;
 
-        // Process each file
-        for (const [path, file] of Object.entries(zip.files)) {
+        // First, process 1.21 files
+        for (const [path, file] of Object.entries(zip121.files)) {
             processedFiles++;
-            const percent = 10 + Math.floor((processedFiles / totalFiles) * 55);
+            const percent = 10 + Math.floor((processedFiles / totalFiles) * 45);
             
             if (processedFiles % 10 === 0) {
-                updateProgress(percent, `Processing files... (${processedFiles}/${totalFiles})`);
-                await sleep(0); // Allow UI to update
+                updateProgress(percent, `Processing 1.21 files... (${processedFiles}/${totalFiles})`);
+                await sleep(0);
             }
 
-            // Skip if it's a directory
             if (file.dir) continue;
+            if (shouldSkipFile(path)) continue;
 
-            // Check if we should skip this file
-            if (shouldSkipFile(path)) {
-                continue;
-            }
+            // Skip if we prefer the 1.12 version
+            if (PREFER_112_FILES.includes(path.toLowerCase())) continue;
 
             // Special handling for pack.mcmeta
             if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
@@ -330,51 +309,37 @@ async function convertPack() {
                 continue;
             }
 
-            // Get file content
             const content = await file.async('blob');
-
-            // Add the original file
             outputZip.file(path, content);
-
-            // Create legacy duplicates for compatibility
             await createLegacyDuplicates(outputZip, path, content);
         }
 
-        updateProgress(65, 'Processing water textures...');
-
-        // Process water textures - apply blue tint if grayscale
-        const waterStillPath = 'assets/minecraft/textures/block/water_still.png';
-        const waterFlowPath = 'assets/minecraft/textures/block/water_flow.png';
-        
-        for (const waterPath of [waterStillPath, waterFlowPath]) {
-            const waterFile = outputZip.file(waterPath);
-            if (waterFile) {
-                try {
-                    const waterBlob = await waterFile.async('blob');
-                    const waterDataUrl = await blobToDataURL(waterBlob);
-                    
-                    // Check if image is grayscale and apply blue tint
-                    const tintedWater = await applyBlueTint(waterDataUrl);
-                    if (tintedWater) {
-                        outputZip.file(waterPath, tintedWater, {base64: true});
-                    }
-                } catch (error) {
-                    console.warn('Could not process water texture:', error);
-                }
+        // Now add preferred files from 1.12
+        updateProgress(55, 'Merging 1.12 reference textures...');
+        for (const prefPath of PREFER_112_FILES) {
+            const file112 = zip112.file(prefPath);
+            if (file112) {
+                const content = await file112.async('blob');
+                outputZip.file(prefPath, content);
+                await createLegacyDuplicates(outputZip, prefPath, content);
             }
         }
-        
-        // Add missing water animation metadata if needed
-        const waterMcmetaPath = 'assets/minecraft/textures/block/water_still.png.mcmeta';
-        if (outputZip.file(waterStillPath) && !outputZip.file(waterMcmetaPath)) {
-            const waterMcmeta = { animation: { frametime: 2 } };
-            outputZip.file(waterMcmetaPath, JSON.stringify(waterMcmeta, null, 2));
+
+        // Add all legacy files from 1.12 that don't exist in 1.21
+        updateProgress(60, 'Adding legacy 1.12 assets...');
+        for (const [path, file] of Object.entries(zip112.files)) {
+            if (file.dir) continue;
+            if (outputZip.file(path)) continue; // Already added
+            
+            // Add legacy GUI, entity, and other assets
+            if (path.includes('/gui/') || path.includes('/entity/') || 
+                path.includes('/item/') && !outputZip.file(path)) {
+                const content = await file.async('blob');
+                outputZip.file(path, content);
+            }
         }
 
-        updateProgress(75, 'Creating wallpaper...');
-        
-        // Force create the directory structure so the tuff folder ALWAYS exists
-        outputZip.folder('assets/tuff/textures/ui/wallpaper');
+        updateProgress(70, 'Creating wallpaper...');
         
         // Create wallpaper from panorama images
         const panorama0Path = 'assets/minecraft/textures/gui/title/background/panorama_0.png';
@@ -391,8 +356,6 @@ async function convertPack() {
             } catch (error) {
                 console.warn('Could not create wallpaper:', error);
             }
-        } else {
-            console.log('Panorama images not found in zip. Defaulting to empty wallpaper folder.');
         }
 
         updateProgress(80, 'Finalizing conversion...');
@@ -413,7 +376,7 @@ async function convertPack() {
         // Download the file
         const filename = state.options.packName 
             ? `${state.options.packName}_TuffClient.zip`
-            : state.file.name.replace('.zip', '_TuffClient.zip');
+            : state.file121.name.replace('.zip', '_TuffClient.zip');
         
         saveAs(blob, filename);
 
@@ -435,7 +398,6 @@ async function convertPack() {
 function shouldSkipFile(path) {
     const pathLower = path.toLowerCase();
 
-    // Skip files in folders to remove
     if (state.options.removeNonTextures) {
         for (const folder of FOLDERS_TO_REMOVE) {
             if (pathLower.includes(`/${folder}/`) || pathLower.includes(`\\${folder}\\`)) {
@@ -443,7 +405,6 @@ function shouldSkipFile(path) {
             }
         }
 
-        // Skip specific files
         for (const file of FILES_TO_REMOVE) {
             if (pathLower.endsWith(file)) {
                 return true;
@@ -451,13 +412,11 @@ function shouldSkipFile(path) {
         }
     }
 
-    // Skip template-only files
     const filename = path.split('/').pop();
     if (TEMPLATE_ONLY_FILES.includes(filename)) {
         return true;
     }
 
-    // Only skip specific new mob textures if option is disabled
     if (!state.options.convertNewMobs && pathLower.includes('entity/')) {
         const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer'];
         for (const mob of newMobs) {
@@ -473,7 +432,6 @@ function shouldSkipFile(path) {
 async function createLegacyDuplicates(outputZip, originalPath, content) {
     const path = originalPath.toLowerCase();
     
-    // Helper function to add duplicate
     const addDuplicate = (newPath) => {
         outputZip.file(newPath, content);
     };
@@ -557,17 +515,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
     }
     
-    // === DYES (color_dye to dye_color) ===
-    const dyeColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 
-                       'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of dyeColors) {
-        if (path.endsWith(`/item/${color}_dye.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_dye\\.png$`, 'i'), `dye_${color}.png`));
-        }
-    }
-    
-    // === GLASS & GLASS PANES (color_stained_glass to glass_color) ===
+    // === GLASS & GLASS PANES ===
     const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                          'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -580,7 +528,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === WOOL (color_wool to wool_colored_color) ===
+    // === WOOL ===
     const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -590,7 +538,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === CONCRETE (color_concrete to concrete_color) ===
+    // === CONCRETE ===
     const concreteColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                             'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -603,7 +551,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === TERRACOTTA (color_terracotta to hardened_clay_stained_color) ===
+    // === TERRACOTTA ===
     const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                               'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -614,10 +562,10 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
     }
     
     if (path.endsWith('/block/terracotta.png')) {
-        addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
+addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
     }
     
-    // === GLAZED TERRACOTTA (color_glazed_terracotta to glazed_terracotta_color) ===
+    // === GLAZED TERRACOTTA ===
     const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
                           'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
     
@@ -627,7 +575,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === LOGS (oak_log to log_oak) ===
+    // === LOGS ===
     const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of logTypes) {
@@ -641,7 +589,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === PLANKS (oak_planks to planks_oak) ===
+    // === PLANKS ===
     const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of plankTypes) {
@@ -651,7 +599,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === LEAVES (oak_leaves to leaves_oak) ===
+    // === LEAVES ===
     const leafTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of leafTypes) {
@@ -661,7 +609,7 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         }
     }
     
-    // === SAPLINGS (oak_sapling to sapling_oak) ===
+    // === SAPLINGS ===
     const saplingTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
     
     for (const wood of saplingTypes) {
@@ -718,13 +666,21 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
     }
     
-    // === DOORS (oak_door to door_wood, iron_door to door_iron) ===
-    if (path.endsWith('/block/oak_door_bottom.png')) {
-        addDuplicate(originalPath.replace(/oak_door_bottom\.png$/i, 'door_wood_lower.png'));
+    // === DOORS - ALL WOOD TYPES ===
+    const doorTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
+    
+    for (const wood of doorTypes) {
+        if (path.endsWith(`/block/${wood}_door_bottom.png`)) {
+            const legacyName = wood === 'oak' ? 'wood' : wood === 'dark_oak' ? 'dark_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_door_bottom\\.png$`, 'i'), `door_${legacyName}_lower.png`));
+        }
+        if (path.endsWith(`/block/${wood}_door_top.png`)) {
+            const legacyName = wood === 'oak' ? 'wood' : wood === 'dark_oak' ? 'dark_oak' : wood;
+            addDuplicate(originalPath.replace(new RegExp(`${wood}_door_top\\.png$`, 'i'), `door_${legacyName}_upper.png`));
+        }
     }
-    if (path.endsWith('/block/oak_door_top.png')) {
-        addDuplicate(originalPath.replace(/oak_door_top\.png$/i, 'door_wood_upper.png'));
-    }
+    
+    // Iron door
     if (path.endsWith('/block/iron_door_bottom.png')) {
         addDuplicate(originalPath.replace(/iron_door_bottom\.png$/i, 'door_iron_lower.png'));
     }
@@ -768,12 +724,10 @@ function modifyPackMcmeta(content) {
     try {
         const data = JSON.parse(content);
         
-        // Only update description if custom pack name is provided
         if (state.options.packName) {
             data.pack.description = `${state.options.packName} - Tuff Client Edition`;
         }
         
-        // Ensure pack format is 3 (1.11-1.12.x)
         data.pack.pack_format = 3;
 
         return JSON.stringify(data, null, 4);
@@ -796,7 +750,7 @@ function updateProgress(percent, message) {
     if (percent === 100) {
         progressDetails.textContent = '🎉 Your Tuff Client texture pack is ready!';
     } else {
-        progressDetails.textContent = `Processing your resource pack...`;
+        progressDetails.textContent = `Merging 1.12 and 1.21 packs...`;
     }
 }
 
@@ -815,7 +769,6 @@ function loadOptions() {
             const options = JSON.parse(saved);
             state.options = { ...state.options, ...options };
             
-            // Update UI
             document.getElementById('removeNonTextures').checked = state.options.removeNonTextures;
             document.getElementById('convertNewMobs').checked = state.options.convertNewMobs;
             document.getElementById('updateMcmeta').checked = state.options.updateMcmeta;
@@ -826,7 +779,6 @@ function loadOptions() {
     }
 }
 
-// Utility: Check if browser supports required features
 function checkBrowserSupport() {
     if (typeof JSZip === 'undefined') {
         alert('JSZip library failed to load. Please refresh the page.');
@@ -839,7 +791,6 @@ function checkBrowserSupport() {
     return true;
 }
 
-// Check on load
 window.addEventListener('load', () => {
     if (!checkBrowserSupport()) {
         document.getElementById('convertBtn').disabled = true;
