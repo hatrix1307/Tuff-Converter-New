@@ -36,71 +36,86 @@
         </header>
 
         <main class="main">
-            <div class="upload-section">
-                <div class="upload-card" id="dropZone">
+            <div class="upload-section-dual">
+                <div class="upload-card" id="dropZone112">
                     <div class="upload-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
+                            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
-                    <h2 class="upload-title">Drop your 1.21 Resource Pack</h2>
-                    <p class="upload-text">or click to browse</p>
-                    <input type="file" id="fileInput" accept=".zip" hidden>
-                    <div class="file-info" id="fileInfo" style="display: none;">
-                        <span class="file-name" id="fileName"></span>
-                        <span class="file-size" id="fileSize"></span>
+                    <div class="upload-number">1</div>
+                    <h2 class="upload-title">1.12 Reference Pack</h2>
+                    <p class="upload-text">For animated textures & legacy assets</p>
+                    <input type="file" id="fileInput112" accept=".zip" hidden>
+                    <div class="file-info" id="fileInfo112" style="display: none;">
+                        <span class="file-name" id="fileName112"></span>
+                        <span class="file-size" id="fileSize112"></span>
                     </div>
                 </div>
 
-                <div class="options-card">
-                    <h3 class="options-title">Conversion Options</h3>
-                    
-                    <div class="option-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="removeNonTextures" checked>
-                            <span class="checkbox-custom"></span>
-                            <span class="checkbox-text">
-                                <strong>Remove Non-Textures</strong>
-                                <small>Removes models, blockstates, sounds, lang files</small>
-                            </span>
-                        </label>
+                <div class="upload-card" id="dropZone121">
+                    <div class="upload-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
                     </div>
-
-                    <div class="option-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="convertNewMobs">
-                            <span class="checkbox-custom"></span>
-                            <span class="checkbox-text">
-                                <strong>Include New Mobs</strong>
-                                <small>Keep Warden, Allay, Frog textures (experimental)</small>
-                            </span>
-                        </label>
-                    </div>
-
-                    <div class="option-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="updateMcmeta" checked>
-                            <span class="checkbox-custom"></span>
-                            <span class="checkbox-text">
-                                <strong>Update pack.mcmeta</strong>
-                                <small>Update pack format to 3 (keeps original description)</small>
-                            </span>
-                        </label>
-                    </div>
-
-                    <div class="option-group">
-                        <label class="text-input-label">
-                            <strong>Custom Pack Name (optional)</strong>
-                            <input type="text" id="packName" class="text-input" placeholder="My Custom Pack">
-                        </label>
+                    <div class="upload-number">2</div>
+                    <h2 class="upload-title">1.21 Source Pack</h2>
+                    <p class="upload-text">The pack you want to convert</p>
+                    <input type="file" id="fileInput121" accept=".zip" hidden>
+                    <div class="file-info" id="fileInfo121" style="display: none;">
+                        <span class="file-name" id="fileName121"></span>
+                        <span class="file-size" id="fileSize121"></span>
                     </div>
                 </div>
             </div>
 
+            <div class="options-card">
+                <h3 class="options-title">Conversion Options</h3>
+                
+                <div class="option-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="removeNonTextures" checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text">
+                            <strong>Remove Non-Textures</strong>
+                            <small>Removes models, blockstates, sounds, lang files</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="option-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="convertNewMobs">
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text">
+                            <strong>Include New Mobs</strong>
+                            <small>Keep Warden, Allay, Frog textures (experimental)</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="option-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="updateMcmeta" checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text">
+                            <strong>Update pack.mcmeta</strong>
+                            <small>Update pack format to 3 (keeps original description)</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="option-group">
+                    <label class="text-input-label">
+                        <strong>Custom Pack Name (optional)</strong>
+                        <input type="text" id="packName" class="text-input" placeholder="My Custom Pack">
+                    </label>
+                </div>
+            </div>
+
             <button class="convert-btn" id="convertBtn" disabled>
-                <span class="btn-text">SELECT A FILE TO START</span>
+                <span class="btn-text">SELECT BOTH FILES TO START</span>
                 <span class="btn-icon">⚡</span>
             </button>
 
@@ -119,39 +134,41 @@
 
             <div class="info-section">
                 <div class="info-card">
-                    <h3 class="info-title">What This Does</h3>
+                    <h3 class="info-title">📦 How This Works</h3>
                     <ul class="info-list">
-                        <li>Converts 1.21 vanilla resource packs to Tuff Client format</li>
-                        <li>Removes unnecessary files (models, blockstates, sounds)</li>
-                        <li>Maintains texture compatibility with Tuff Client</li>
-                        <li>Preserves all block, item, and entity textures</li>
-                        <li>Updates pack metadata to match Tuff standards</li>
+                        <li>Upload the <strong>1.12 version</strong> of your texture pack for reference textures</li>
+                        <li>Upload the <strong>1.21 version</strong> of the same pack for new content</li>
+                        <li>Converter merges both: 1.21 textures + 1.12 animated/legacy textures</li>
+                        <li>Creates legacy name duplicates for full Tuff Client compatibility</li>
+                        <li>Outputs a complete Tuff Client-ready resource pack</li>
                     </ul>
                 </div>
 
                 <div class="info-card">
-                    <h3 class="info-title">Important Notes</h3>
+                    <h3 class="info-title">⚠️ Important Notes</h3>
                     <ul class="info-list">
                         <li><strong>Client-side only:</strong> All processing happens in your browser</li>
                         <li><strong>No upload:</strong> Your files never leave your computer</li>
-                        <li><strong>Texture style:</strong> This converter maintains original textures</li>
+                        <li><strong>Both packs needed:</strong> Use the same texture pack, just different versions</li>
                         <li><strong>Manual review:</strong> Always test the output in-game</li>
                     </ul>
                 </div>
 
                 <div class="info-card warning-card">
-                    <h3 class="info-title">Style Conversion</h3>
+                    <h3 class="info-title">🎨 What Gets Merged</h3>
                     <p class="warning-text">
-                        This tool converts the <strong>structure</strong> of resource packs, not the art style. 
-                        This converter focuses on file organization and Tuff Client compatibility.
+                        The 1.12 pack provides: animated water/lava, legacy entity textures, 
+                        and properly formatted GUI elements. The 1.21 pack provides: all new 
+                        blocks, items, and textures from updates 1.13+. Both are combined to 
+                        create the perfect Tuff Client pack.
                     </p>
                 </div>
             </div>
         </main>
 
         <footer class="footer">
-            <p>Made by hatrix1307 and like 3 AI's • Open Source on GitHub</p>
-            <p class="footer-small">hella vibecoded btw</p>
+            <p>Made for the Tuff Network Community • Open Source on GitHub</p>
+            <p class="footer-small">Not affiliated with Mojang or Microsoft</p>
         </footer>
     </div>
 
