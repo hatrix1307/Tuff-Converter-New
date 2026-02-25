@@ -339,7 +339,7 @@ async function convertPack() {
 
         // Success message
         setTimeout(() => {
-            updateProgress(100, '✅ Conversion complete! Check your downloads.');
+            updateProgress(100, 'Conversion complete! Check your downloads.');
             convertBtn.querySelector('.btn-text').textContent = 'CONVERT ANOTHER PACK';
             convertBtn.disabled = false;
         }, 500);
@@ -705,7 +705,7 @@ function updateProgress(percent, message) {
     progressLabel.textContent = message;
     
     if (percent === 100) {
-        progressDetails.textContent = '🎉 Your Tuff Client texture pack is ready!';
+        progressDetails.textContent = 'Your Tuff Client texture pack is ready!';
     } else {
         progressDetails.textContent = `Merging 1.12 and 1.21 packs...`;
     }
