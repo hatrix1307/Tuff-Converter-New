@@ -680,6 +680,26 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
     if (path.endsWith('/block/attached_melon_stem.png')) {
         addDuplicate(originalPath.replace(/attached_melon_stem\.png$/i, 'stem_melon_connected.png'));
     }
+    
+    // === STONE VARIANTS (andesite, diorite, granite) ===
+    if (path.endsWith('/block/andesite.png')) {
+        addDuplicate(originalPath.replace(/andesite\.png$/i, 'stone_andesite.png'));
+    }
+    if (path.endsWith('/block/polished_andesite.png')) {
+        addDuplicate(originalPath.replace(/polished_andesite\.png$/i, 'stone_andesite_smooth.png'));
+    }
+    if (path.endsWith('/block/diorite.png')) {
+        addDuplicate(originalPath.replace(/diorite\.png$/i, 'stone_diorite.png'));
+    }
+    if (path.endsWith('/block/polished_diorite.png')) {
+        addDuplicate(originalPath.replace(/polished_diorite\.png$/i, 'stone_diorite_smooth.png'));
+    }
+    if (path.endsWith('/block/granite.png')) {
+        addDuplicate(originalPath.replace(/granite\.png$/i, 'stone_granite.png'));
+    }
+    if (path.endsWith('/block/polished_granite.png')) {
+        addDuplicate(originalPath.replace(/polished_granite\.png$/i, 'stone_granite_smooth.png'));
+    }
 }
 
 function modifyPackMcmeta(content) {
