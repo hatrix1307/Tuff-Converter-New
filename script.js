@@ -183,6 +183,7 @@ function formatBytes(bytes) {
 }
 
 // Create wallpaper from panorama_0 (1920x1080 crop)
+// Create wallpaper from panorama_0 (1920x1080 crop)
 async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -192,6 +193,10 @@ async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
             canvas.width = 1920;
             canvas.height = 1080;
             const ctx = canvas.getContext('2d');
+            
+            // Use better image smoothing
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             
             // Calculate scaling to cover the entire 1920x1080 canvas
             const scale = Math.max(1920 / img.width, 1080 / img.height);
@@ -205,11 +210,11 @@ async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
             // Draw scaled and centered
             ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
             
-            // Convert to JPEG
+            // Convert to JPEG with maximum quality (1.0)
             canvas.toBlob((blob) => {
                 outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
                 resolve();
-            }, 'image/jpeg', 0.9);
+            }, 'image/jpeg', 1.0);
         };
         
         img.onerror = () => resolve(); // Skip if error
