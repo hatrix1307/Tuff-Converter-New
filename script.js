@@ -57,6 +57,13 @@ const PREFER_112_FILES = [
     'assets/minecraft/textures/block/lava_still.png.mcmeta',
     'assets/minecraft/textures/block/lava_flow.png',
     'assets/minecraft/textures/block/lava_flow.png.mcmeta',
+    // Stone variants (1.12 has better legacy names)
+    'assets/minecraft/textures/block/stone_andesite.png',
+    'assets/minecraft/textures/block/stone_andesite_smooth.png',
+    'assets/minecraft/textures/block/stone_diorite.png',
+    'assets/minecraft/textures/block/stone_diorite_smooth.png',
+    'assets/minecraft/textures/block/stone_granite.png',
+    'assets/minecraft/textures/block/stone_granite_smooth.png',
     // Legacy entity textures
     'assets/minecraft/textures/entity/alex.png',
     'assets/minecraft/textures/entity/arrow.png',
