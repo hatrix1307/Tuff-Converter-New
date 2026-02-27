@@ -47,13 +47,13 @@ const TEMPLATE_ONLY_FILES = [
 ];
 
 // Patterns to prefer from 1.12 (better compatibility, animated, or commonly vanilla in 1.21 packs)
-// Patterns to prefer from 1.12 (better compatibility, animated, or commonly vanilla in 1.21 packs)
 const PREFER_112_PATTERNS = [
     // Animated textures
     '/block/water_still.png',
     '/block/water_flow.png',
     '/block/lava_still.png',
     '/block/lava_flow.png',
+    '.mcmeta',
     // Stone variants - BOTH modern and legacy names
     '/block/stone_andesite',
     '/block/stone_diorite',
@@ -64,7 +64,7 @@ const PREFER_112_PATTERNS = [
     '/block/polished_diorite.png',
     '/block/granite.png',
     '/block/polished_granite.png',
-    // Furnaces - BOTH modern and legacy names
+    // Furnaces
     '/block/furnace_front.png',
     '/block/furnace_front_on.png',
     '/block/furnace_side.png',
@@ -286,9 +286,6 @@ async function convertPack() {
             if (file.dir) continue;
             if (shouldSkipFile(path)) continue;
 
-            // Skip if we should prefer the 1.12 version
-            if (shouldPrefer112(path)) continue;
-
             // Special handling for pack.mcmeta
             if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
                 const content = await file.async('string');
@@ -302,7 +299,7 @@ async function convertPack() {
             await createLegacyDuplicates(outputZip, path, content);
         }
 
-        // Now add files from 1.12 (these override 1.21 where applicable)
+        // Now add files from 1.12 (these can override 1.21 where applicable)
         updateProgress(50, 'Merging 1.12 reference textures...');
         for (const [path, file] of Object.entries(zip112.files)) {
             processedFiles++;
@@ -315,13 +312,20 @@ async function convertPack() {
 
             if (file.dir) continue;
             
-            // Add if it should be preferred from 1.12, or if it doesn't exist in output yet
-            if (shouldPrefer112(path) || !outputZip.file(path)) {
-                // Only add texture/GUI/entity files from 1.12, skip junk
-                if (path.includes('/textures/') || path.includes('/gui/') || 
-                    path.includes('/entity/') || path.endsWith('pack.png') || 
-                    path.endsWith('pack.mcmeta')) {
-                    const content = await file.async('blob');
+            // Only add texture/GUI/entity files from 1.12
+            if (path.includes('/textures/') || path.includes('/gui/') || 
+                path.includes('/entity/') || path.endsWith('pack.png')) {
+                
+                const content = await file.async('blob');
+                
+                // If it matches a prefer pattern, FORCE override by removing old and adding new
+                if (shouldPrefer112(path)) {
+                    outputZip.remove(path); // Remove 1.21 version
+                    outputZip.file(path, content); // Add 1.12 version
+                    await createLegacyDuplicates(outputZip, path, content);
+                } 
+                // Otherwise only add if doesn't exist
+                else if (!outputZip.file(path)) {
                     outputZip.file(path, content);
                     await createLegacyDuplicates(outputZip, path, content);
                 }
