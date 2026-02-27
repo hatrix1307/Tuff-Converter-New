@@ -47,18 +47,28 @@ const TEMPLATE_ONLY_FILES = [
 ];
 
 // Patterns to prefer from 1.12 (better compatibility, animated, or commonly vanilla in 1.21 packs)
+// Patterns to prefer from 1.12 (better compatibility, animated, or commonly vanilla in 1.21 packs)
 const PREFER_112_PATTERNS = [
     // Animated textures
     '/block/water_still.png',
     '/block/water_flow.png',
     '/block/lava_still.png',
     '/block/lava_flow.png',
-    // Legacy stone variants (often vanilla in 1.21 packs)
+    // Stone variants - BOTH modern and legacy names
     '/block/stone_andesite',
     '/block/stone_diorite',
     '/block/stone_granite',
-    // Furnaces (often vanilla in 1.21 packs)
-    '/block/furnace_',
+    '/block/andesite.png',
+    '/block/polished_andesite.png',
+    '/block/diorite.png',
+    '/block/polished_diorite.png',
+    '/block/granite.png',
+    '/block/polished_granite.png',
+    // Furnaces - BOTH modern and legacy names
+    '/block/furnace_front.png',
+    '/block/furnace_front_on.png',
+    '/block/furnace_side.png',
+    '/block/furnace_top.png',
     // Legacy entity textures
     '/entity/alex.png',
     '/entity/arrow.png',
