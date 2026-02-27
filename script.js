@@ -46,33 +46,28 @@ const TEMPLATE_ONLY_FILES = [
     'conduit.png'
 ];
 
-// Files to take from 1.12 reference pack (better quality/animated)
-const PREFER_112_FILES = [
+// Patterns to prefer from 1.12 (better compatibility, animated, or commonly vanilla in 1.21 packs)
+const PREFER_112_PATTERNS = [
     // Animated textures
-    'assets/minecraft/textures/block/water_still.png',
-    'assets/minecraft/textures/block/water_still.png.mcmeta',
-    'assets/minecraft/textures/block/water_flow.png',
-    'assets/minecraft/textures/block/water_flow.png.mcmeta',
-    'assets/minecraft/textures/block/lava_still.png',
-    'assets/minecraft/textures/block/lava_still.png.mcmeta',
-    'assets/minecraft/textures/block/lava_flow.png',
-    'assets/minecraft/textures/block/lava_flow.png.mcmeta',
-    // Stone variants (1.12 has better legacy names)
-    'assets/minecraft/textures/block/stone_andesite.png',
-    'assets/minecraft/textures/block/stone_andesite_smooth.png',
-    'assets/minecraft/textures/block/stone_diorite.png',
-    'assets/minecraft/textures/block/stone_diorite_smooth.png',
-    'assets/minecraft/textures/block/stone_granite.png',
-    'assets/minecraft/textures/block/stone_granite_smooth.png',
+    '/block/water_still.png',
+    '/block/water_flow.png',
+    '/block/lava_still.png',
+    '/block/lava_flow.png',
+    // Legacy stone variants (often vanilla in 1.21 packs)
+    '/block/stone_andesite',
+    '/block/stone_diorite',
+    '/block/stone_granite',
+    // Furnaces (often vanilla in 1.21 packs)
+    '/block/furnace_',
     // Legacy entity textures
-    'assets/minecraft/textures/entity/alex.png',
-    'assets/minecraft/textures/entity/arrow.png',
-    'assets/minecraft/textures/entity/iron_golem.png',
-    'assets/minecraft/textures/entity/sign.png',
-    'assets/minecraft/textures/entity/snowman.png',
-    // GUI elements that are better in 1.12
-    'assets/minecraft/textures/gui/book.png',
-    'assets/minecraft/textures/gui/recipe_book.png',
+    '/entity/alex.png',
+    '/entity/arrow.png',
+    '/entity/iron_golem.png',
+    '/entity/sign.png',
+    '/entity/snowman.png',
+    // GUI elements
+    '/gui/book.png',
+    '/gui/recipe_book.png',
 ];
 
 // Initialize
@@ -189,7 +184,17 @@ function formatBytes(bytes) {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
-// Create wallpaper from panorama_0 (1920x1080 crop)
+// Check if a path should prefer the 1.12 version
+function shouldPrefer112(path) {
+    const pathLower = path.toLowerCase();
+    for (const pattern of PREFER_112_PATTERNS) {
+        if (pathLower.includes(pattern)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Create wallpaper from panorama_0 (1920x1080 crop)
 async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
     return new Promise((resolve) => {
@@ -217,7 +222,7 @@ async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
             // Draw scaled and centered
             ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
             
-            // Convert to JPEG with maximum quality (1.0)
+            // Convert to JPEG with maximum quality
             canvas.toBlob((blob) => {
                 outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
                 resolve();
@@ -256,12 +261,12 @@ async function convertPack() {
         // Create output zip
         const outputZip = new JSZip();
         let processedFiles = 0;
-        const totalFiles = Object.keys(zip121.files).length + PREFER_112_FILES.length;
+        const totalFiles = Object.keys(zip121.files).length + Object.keys(zip112.files).length;
 
         // First, process 1.21 files
         for (const [path, file] of Object.entries(zip121.files)) {
             processedFiles++;
-            const percent = 10 + Math.floor((processedFiles / totalFiles) * 45);
+            const percent = 10 + Math.floor((processedFiles / totalFiles) * 40);
             
             if (processedFiles % 10 === 0) {
                 updateProgress(percent, `Processing 1.21 files... (${processedFiles}/${totalFiles})`);
@@ -271,8 +276,8 @@ async function convertPack() {
             if (file.dir) continue;
             if (shouldSkipFile(path)) continue;
 
-            // Skip if we prefer the 1.12 version
-            if (PREFER_112_FILES.includes(path.toLowerCase())) continue;
+            // Skip if we should prefer the 1.12 version
+            if (shouldPrefer112(path)) continue;
 
             // Special handling for pack.mcmeta
             if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
@@ -287,28 +292,29 @@ async function convertPack() {
             await createLegacyDuplicates(outputZip, path, content);
         }
 
-        // Now add preferred files from 1.12
-        updateProgress(55, 'Merging 1.12 reference textures...');
-        for (const prefPath of PREFER_112_FILES) {
-            const file112 = zip112.file(prefPath);
-            if (file112) {
-                const content = await file112.async('blob');
-                outputZip.file(prefPath, content);
-                await createLegacyDuplicates(outputZip, prefPath, content);
-            }
-        }
-
-        // Add all legacy files from 1.12 that don't exist in 1.21
-        updateProgress(60, 'Adding legacy 1.12 assets...');
+        // Now add files from 1.12 (these override 1.21 where applicable)
+        updateProgress(50, 'Merging 1.12 reference textures...');
         for (const [path, file] of Object.entries(zip112.files)) {
-            if (file.dir) continue;
-            if (outputZip.file(path)) continue; // Already added
+            processedFiles++;
+            const percent = 50 + Math.floor((processedFiles / totalFiles) * 20);
             
-            // Add legacy GUI, entity, and other assets
-            if (path.includes('/gui/') || path.includes('/entity/') || 
-                path.includes('/item/') && !outputZip.file(path)) {
-                const content = await file.async('blob');
-                outputZip.file(path, content);
+            if (processedFiles % 20 === 0) {
+                updateProgress(percent, `Adding 1.12 textures... (${processedFiles}/${totalFiles})`);
+                await sleep(0);
+            }
+
+            if (file.dir) continue;
+            
+            // Add if it should be preferred from 1.12, or if it doesn't exist in output yet
+            if (shouldPrefer112(path) || !outputZip.file(path)) {
+                // Only add texture/GUI/entity files from 1.12, skip junk
+                if (path.includes('/textures/') || path.includes('/gui/') || 
+                    path.includes('/entity/') || path.endsWith('pack.png') || 
+                    path.endsWith('pack.mcmeta')) {
+                    const content = await file.async('blob');
+                    outputZip.file(path, content);
+                    await createLegacyDuplicates(outputZip, path, content);
+                }
             }
         }
 
@@ -351,7 +357,7 @@ async function convertPack() {
 
         // Success message
         setTimeout(() => {
-            updateProgress(100, 'Conversion complete! Check your downloads.');
+            updateProgress(100, '✅ Conversion complete! Check your downloads.');
             convertBtn.querySelector('.btn-text').textContent = 'CONVERT ANOTHER PACK';
             convertBtn.disabled = false;
         }, 500);
@@ -596,6 +602,47 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
         addDuplicate(originalPath.replace(/podzol_side\.png$/i, 'dirt_podzol_side.png'));
     }
     
+    // === STONE VARIANTS ===
+    // Duplicate modern names to legacy names (andesite.png -> stone_andesite.png)
+    if (path.endsWith('/block/andesite.png')) {
+        addDuplicate(originalPath.replace(/andesite\.png$/i, 'stone_andesite.png'));
+    }
+    if (path.endsWith('/block/polished_andesite.png')) {
+        addDuplicate(originalPath.replace(/polished_andesite\.png$/i, 'stone_andesite_smooth.png'));
+    }
+    if (path.endsWith('/block/diorite.png')) {
+        addDuplicate(originalPath.replace(/diorite\.png$/i, 'stone_diorite.png'));
+    }
+    if (path.endsWith('/block/polished_diorite.png')) {
+        addDuplicate(originalPath.replace(/polished_diorite\.png$/i, 'stone_diorite_smooth.png'));
+    }
+    if (path.endsWith('/block/granite.png')) {
+        addDuplicate(originalPath.replace(/granite\.png$/i, 'stone_granite.png'));
+    }
+    if (path.endsWith('/block/polished_granite.png')) {
+        addDuplicate(originalPath.replace(/polished_granite\.png$/i, 'stone_granite_smooth.png'));
+    }
+    
+    // Duplicate legacy names to modern names (stone_andesite.png -> andesite.png)
+    if (path.endsWith('/block/stone_andesite.png')) {
+        addDuplicate(originalPath.replace(/stone_andesite\.png$/i, 'andesite.png'));
+    }
+    if (path.endsWith('/block/stone_andesite_smooth.png')) {
+        addDuplicate(originalPath.replace(/stone_andesite_smooth\.png$/i, 'polished_andesite.png'));
+    }
+    if (path.endsWith('/block/stone_diorite.png')) {
+        addDuplicate(originalPath.replace(/stone_diorite\.png$/i, 'diorite.png'));
+    }
+    if (path.endsWith('/block/stone_diorite_smooth.png')) {
+        addDuplicate(originalPath.replace(/stone_diorite_smooth\.png$/i, 'polished_diorite.png'));
+    }
+    if (path.endsWith('/block/stone_granite.png')) {
+        addDuplicate(originalPath.replace(/stone_granite\.png$/i, 'granite.png'));
+    }
+    if (path.endsWith('/block/stone_granite_smooth.png')) {
+        addDuplicate(originalPath.replace(/stone_granite_smooth\.png$/i, 'polished_granite.png'));
+    }
+    
     // === END PORTAL FRAME ===
     if (path.endsWith('/block/end_portal_frame_top.png')) {
         addDuplicate(originalPath.replace(/end_portal_frame_top\.png$/i, 'endframe_top.png'));
@@ -687,26 +734,6 @@ async function createLegacyDuplicates(outputZip, originalPath, content) {
     if (path.endsWith('/block/attached_melon_stem.png')) {
         addDuplicate(originalPath.replace(/attached_melon_stem\.png$/i, 'stem_melon_connected.png'));
     }
-    
-    // === STONE VARIANTS (andesite, diorite, granite) ===
-    if (path.endsWith('/block/andesite.png')) {
-        addDuplicate(originalPath.replace(/andesite\.png$/i, 'stone_andesite.png'));
-    }
-    if (path.endsWith('/block/polished_andesite.png')) {
-        addDuplicate(originalPath.replace(/polished_andesite\.png$/i, 'stone_andesite_smooth.png'));
-    }
-    if (path.endsWith('/block/diorite.png')) {
-        addDuplicate(originalPath.replace(/diorite\.png$/i, 'stone_diorite.png'));
-    }
-    if (path.endsWith('/block/polished_diorite.png')) {
-        addDuplicate(originalPath.replace(/polished_diorite\.png$/i, 'stone_diorite_smooth.png'));
-    }
-    if (path.endsWith('/block/granite.png')) {
-        addDuplicate(originalPath.replace(/granite\.png$/i, 'stone_granite.png'));
-    }
-    if (path.endsWith('/block/polished_granite.png')) {
-        addDuplicate(originalPath.replace(/polished_granite\.png$/i, 'stone_granite_smooth.png'));
-    }
 }
 
 function modifyPackMcmeta(content) {
@@ -737,7 +764,7 @@ function updateProgress(percent, message) {
     progressLabel.textContent = message;
     
     if (percent === 100) {
-        progressDetails.textContent = 'Your Tuff Client texture pack is ready!';
+        progressDetails.textContent = '🎉 Your Tuff Client texture pack is ready!';
     } else {
         progressDetails.textContent = `Merging 1.12 and 1.21 packs...`;
     }
