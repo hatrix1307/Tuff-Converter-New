@@ -416,7 +416,7 @@ async function convertPack() {
             await processBetaBuildLogic(outputZip, zip112, zip121);
         }
 
-        updateProgress(70, 'Creating wallpaper...');
+updateProgress(70, 'Creating wallpaper...');
         
         // Create wallpaper from panorama images
         const panoramaBasePath = 'assets/minecraft/textures/gui/title/background/panorama_';
@@ -433,6 +433,7 @@ async function convertPack() {
         // If we have at least panorama_0, create wallpaper
         if (panoramaBlobs[0]) {
             try {
+                console.log('Beta build enabled:', state.options.useBetaBuild); // Debug
                 await createWallpaperFromPanorama(outputZip, panoramaBlobs, state.options.useBetaBuild);
             } catch (error) {
                 console.warn('Could not create wallpaper:', error);
