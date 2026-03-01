@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/png" href="https://static.wikia.nocookie.net/minecraft_gamepedia/images/9/99/Tuff.png">
 </head>
 <body>
     <div class="grain-overlay"></div>
@@ -97,6 +96,17 @@
                 </div>
 
                 <div class="option-group">
+                    <label class="checkbox-label disabled">
+                        <input type="checkbox" id="useBetaBuild" disabled>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text">
+                            <strong>Use Beta Build (experimental)</strong>
+                            <small>Advanced features - coming soon</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="option-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="updateMcmeta" checked>
                         <span class="checkbox-custom"></span>
@@ -117,7 +127,7 @@
 
             <button class="convert-btn" id="convertBtn" disabled>
                 <span class="btn-text">SELECT BOTH FILES TO START</span>
-                <span class="btn-icon"></span>
+                <span class="btn-icon">⚡</span>
             </button>
 
             <div class="progress-section" id="progressSection" style="display: none;">
@@ -135,7 +145,7 @@
 
             <div class="info-section">
                 <div class="info-card">
-                    <h3 class="info-title">How This Works</h3>
+                    <h3 class="info-title">📦 How This Works</h3>
                     <ul class="info-list">
                         <li>Upload the <strong>1.12 version</strong> of your texture pack for reference textures</li>
                         <li>Upload the <strong>1.21 version</strong> of the same pack for new content</li>
@@ -146,7 +156,7 @@
                 </div>
 
                 <div class="info-card">
-                    <h3 class="info-title">Important Notes</h3>
+                    <h3 class="info-title">⚠️ Important Notes</h3>
                     <ul class="info-list">
                         <li><strong>Client-side only:</strong> All processing happens in your browser</li>
                         <li><strong>No upload:</strong> Your files never leave your computer</li>
@@ -156,7 +166,7 @@
                 </div>
 
                 <div class="info-card warning-card">
-                    <h3 class="info-title">What Gets Merged</h3>
+                    <h3 class="info-title">🎨 What Gets Merged</h3>
                     <p class="warning-text">
                         The 1.12 pack provides: animated water/lava, legacy entity textures, 
                         and properly formatted GUI elements. The 1.21 pack provides: all new 
@@ -168,13 +178,8 @@
         </main>
 
         <footer class="footer">
-    <p>
-        Made by hatrix1307 but mostly claude💀 • 
-        <a href="https://github.com/hatrix1307/Tuff-Converter-New" target="_blank" rel="noopener noreferrer" class="footer-link">
-            Open Source on GitHub
-        </a>
-    </p>
-            <p class="footer-small">Not affiliated with Epstein nor his island</p>
+            <p>Made for the Tuff Network Community • Open Source on GitHub</p>
+            <p class="footer-small">Not affiliated with Mojang or Microsoft</p>
         </footer>
     </div>
 
