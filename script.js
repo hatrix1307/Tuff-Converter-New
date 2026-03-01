@@ -8,7 +8,8 @@ const state = {
         removeNonTextures: true,
         convertNewMobs: false,
         updateMcmeta: true,
-        packName: ''
+        packName: '',
+        useBetaBuild: false
     }
 };
 
@@ -126,6 +127,10 @@ function initializeEventListeners() {
         state.options.packName = e.target.value;
         saveOptions();
     });
+    document.getElementById('useBetaBuild').addEventListener('change', (e) => {
+        state.options.useBetaBuild = e.target.checked;
+        saveOptions();
+    });
 
     // Convert button
     convertBtn.addEventListener('click', convertPack);
@@ -205,8 +210,8 @@ function shouldPrefer112(path) {
     return false;
 }
 
-// Create wallpaper from panorama_0 (1920x1080 crop)
-async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
+// Create wallpaper from panorama_0
+async function createWallpaperFromPanorama(outputZip, panorama0Blob, useBetaBuild) {
     return new Promise((resolve) => {
         const img = new Image();
         
@@ -232,11 +237,20 @@ async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
             // Draw scaled and centered
             ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
             
-            // Convert to JPEG with maximum quality
-            canvas.toBlob((blob) => {
-                outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
-                resolve();
-            }, 'image/jpeg', 1.0);
+            // Save to different path based on beta build setting
+            if (useBetaBuild) {
+                // Beta build: PNG at new path
+                canvas.toBlob((blob) => {
+                    outputZip.file('assets/tuff/textures/ui/wallpaper/background.png', blob);
+                    resolve();
+                }, 'image/png');
+            } else {
+                // Standard: JPEG at old path
+                canvas.toBlob((blob) => {
+                    outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
+                    resolve();
+                }, 'image/jpeg', 1.0);
+            }
         };
         
         img.onerror = () => resolve(); // Skip if error
@@ -246,6 +260,13 @@ async function createWallpaperFromPanorama(outputZip, panorama0Blob) {
         reader.onload = (e) => { img.src = e.target.result; };
         reader.readAsDataURL(panorama0Blob);
     });
+}
+
+// Placeholder for beta build processing
+async function processBetaBuildLogic(outputZip, zip112, zip121) {
+    // Future beta build features will go here
+    // For now, this does nothing different
+    return outputZip;
 }
 
 async function convertPack() {
@@ -332,6 +353,11 @@ async function convertPack() {
             }
         }
 
+        // Apply beta build logic if enabled (placeholder for now)
+        if (state.options.useBetaBuild) {
+            await processBetaBuildLogic(outputZip, zip112, zip121);
+        }
+
         updateProgress(70, 'Creating wallpaper...');
         
         // Create wallpaper from panorama_0
@@ -341,7 +367,7 @@ async function convertPack() {
         if (panorama0File) {
             try {
                 const panorama0Blob = await panorama0File.async('blob');
-                await createWallpaperFromPanorama(outputZip, panorama0Blob);
+                await createWallpaperFromPanorama(outputZip, panorama0Blob, state.options.useBetaBuild);
             } catch (error) {
                 console.warn('Could not create wallpaper:', error);
             }
@@ -803,6 +829,7 @@ function loadOptions() {
             document.getElementById('convertNewMobs').checked = state.options.convertNewMobs;
             document.getElementById('updateMcmeta').checked = state.options.updateMcmeta;
             document.getElementById('packName').value = state.options.packName;
+            document.getElementById('useBetaBuild').checked = state.options.useBetaBuild;
         } catch (error) {
             console.error('Error loading options:', error);
         }
