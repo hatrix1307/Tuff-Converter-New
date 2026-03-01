@@ -210,13 +210,18 @@ function shouldPrefer112(path) {
     return false;
 }
 
-// Create wallpaper - single panorama_0 or stitched panorama
 async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuild) {
     return new Promise((resolve) => {
+        // Define the paths
+        const classicPath = 'assets/tuff/textures/ui/wallpaper/classic.jpg';
+        const betaPath = 'assets/tuff/textures/ui/wallpaper/background.png';
+
         if (!useBetaBuild) {
-            // Standard mode: single panorama_0, 1920x1080 JPEG
-            const img = new Image();
+            // --- STANDARD MODE ---
+            // 1. Remove the Beta file if it exists
+            outputZip.remove(betaPath);
             
+            const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 1920;
@@ -236,33 +241,23 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
                 
                 canvas.toBlob((blob) => {
-                    outputZip.file('assets/tuff/textures/ui/wallpaper/classic.jpg', blob);
+                    outputZip.file(classicPath, blob);
                     resolve();
-                }, 'image/jpeg', 1.0);
+                }, 'image/jpeg', 0.9);
             };
             
             img.onerror = () => resolve();
-            
             const reader = new FileReader();
             reader.onload = (e) => { img.src = e.target.result; };
             reader.readAsDataURL(panoramaBlobs[0]);
             
         } else {
-            // Beta mode: stitch all 6 panoramas, 1920x1080 PNG
+            // --- BETA MODE ---
+            // 1. Remove the Standard file if it exists
+            outputZip.remove(classicPath);
+            
             const images = [];
             let loaded = 0;
-            
-            for (let i = 0; i < 6; i++) {
-                images[i] = new Image();
-                images[i].onload = () => {
-                    loaded++;
-                    if (loaded === 6) onAllLoaded();
-                };
-                images[i].onerror = () => {
-                    loaded++;
-                    if (loaded === 6) onAllLoaded();
-                };
-            }
             
             const onAllLoaded = () => {
                 if (!images.every(img => img.complete && img.naturalWidth > 0)) {
@@ -274,18 +269,17 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 const imgWidth = images[0].width;
                 const imgHeight = images[0].height;
                 
-                // Create panoramic strip: back(2), right(0), front(3), left(1)
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = imgWidth * 4;
                 tempCanvas.height = imgHeight;
                 const tempCtx = tempCanvas.getContext('2d');
                 
-                tempCtx.drawImage(images[2], 0, 0);               // back
-                tempCtx.drawImage(images[0], imgWidth, 0);        // right
-                tempCtx.drawImage(images[3], imgWidth * 2, 0);    // front
-                tempCtx.drawImage(images[1], imgWidth * 3, 0);    // left
+                // Stitching order: back(2), right(0), front(3), left(1)
+                tempCtx.drawImage(images[2], 0, 0);
+                tempCtx.drawImage(images[0], imgWidth, 0);
+                tempCtx.drawImage(images[3], imgWidth * 2, 0);
+                tempCtx.drawImage(images[1], imgWidth * 3, 0);
                 
-                // Now scale to 1920x1080
                 const finalCanvas = document.createElement('canvas');
                 finalCanvas.width = 1920;
                 finalCanvas.height = 1080;
@@ -294,7 +288,6 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 finalCtx.imageSmoothingEnabled = true;
                 finalCtx.imageSmoothingQuality = 'high';
                 
-                // Scale the panoramic strip to fit 1920x1080
                 const scale = Math.max(1920 / tempCanvas.width, 1080 / tempCanvas.height);
                 const scaledWidth = tempCanvas.width * scale;
                 const scaledHeight = tempCanvas.height * scale;
@@ -305,13 +298,21 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 finalCtx.drawImage(tempCanvas, x, y, scaledWidth, scaledHeight);
                 
                 finalCanvas.toBlob((blob) => {
-                    outputZip.file('assets/tuff/textures/ui/wallpaper/background.png', blob);
+                    outputZip.file(betaPath, blob);
                     resolve();
                 }, 'image/png');
             };
             
-            // Load all 6 images
             for (let i = 0; i < 6; i++) {
+                images[i] = new Image();
+                images[i].onload = () => {
+                    loaded++;
+                    if (loaded === 6) onAllLoaded();
+                };
+                images[i].onerror = () => {
+                    loaded++;
+                    if (loaded === 6) onAllLoaded();
+                };
                 const reader = new FileReader();
                 reader.onload = (e) => { images[i].src = e.target.result; };
                 reader.readAsDataURL(panoramaBlobs[i]);
