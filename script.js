@@ -237,7 +237,7 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
             reader.onload = (e) => { img.src = e.target.result; };
             reader.readAsDataURL(panoramaBlobs[0]);
             
-        } else {
+} else {
             // Beta mode: stitch 4 panoramas into background.png
             const images = [];
             let loaded = 0;
@@ -283,17 +283,18 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 }, 'image/png');
             };
 
+            // FIX: Use forEach or IIFE to capture i properly
             for (let i = 0; i < 6; i++) {
-                images[i] = new Image();
-                images[i].onload = () => { loaded++; if (loaded === 6) onAllLoaded(); };
-                images[i].onerror = () => { loaded++; if (loaded === 6) onAllLoaded(); };
-                const reader = new FileReader();
-                reader.onload = (e) => { images[i].src = e.target.result; };
-                reader.readAsDataURL(panoramaBlobs[i]);
+                (function(index) {
+                    images[index] = new Image();
+                    images[index].onload = () => { loaded++; if (loaded === 6) onAllLoaded(); };
+                    images[index].onerror = () => { loaded++; if (loaded === 6) onAllLoaded(); };
+                    const reader = new FileReader();
+                    reader.onload = (e) => { images[index].src = e.target.result; };
+                    reader.readAsDataURL(panoramaBlobs[index]);
+                })(i);
             }
         }
-    });
-}
 
 async function convertPack() {
     if (!state.file112 || !state.file121) return;
