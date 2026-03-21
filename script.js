@@ -120,7 +120,6 @@ function initializeEventListeners() {
     });
     document.getElementById('useBetaBuild').addEventListener('change', (e) => {
         state.options.useBetaBuild = e.target.checked;
-        console.log('Beta build checkbox changed to:', e.target.checked);
         saveOptions();
     });
 
@@ -199,66 +198,19 @@ function shouldPrefer112(path) {
     return false;
 }
 
-// Helper to get the duplicate file paths for stone variants
-function getStoneDuplicatePaths(path) {
-    const pathLower = path.toLowerCase();
-    const duplicates = [];
-    
-    // Map legacy to modern and vice versa
-    if (pathLower.includes('/block/stone_andesite.png')) {
-        duplicates.push(path.replace(/stone_andesite\.png$/i, 'andesite.png'));
-    } else if (pathLower.includes('/block/andesite.png')) {
-        duplicates.push(path.replace(/andesite\.png$/i, 'stone_andesite.png'));
-    }
-    
-    if (pathLower.includes('/block/stone_andesite_smooth.png')) {
-        duplicates.push(path.replace(/stone_andesite_smooth\.png$/i, 'polished_andesite.png'));
-    } else if (pathLower.includes('/block/polished_andesite.png')) {
-        duplicates.push(path.replace(/polished_andesite\.png$/i, 'stone_andesite_smooth.png'));
-    }
-    
-    if (pathLower.includes('/block/stone_diorite.png')) {
-        duplicates.push(path.replace(/stone_diorite\.png$/i, 'diorite.png'));
-    } else if (pathLower.includes('/block/diorite.png')) {
-        duplicates.push(path.replace(/diorite\.png$/i, 'stone_diorite.png'));
-    }
-    
-    if (pathLower.includes('/block/stone_diorite_smooth.png')) {
-        duplicates.push(path.replace(/stone_diorite_smooth\.png$/i, 'polished_diorite.png'));
-    } else if (pathLower.includes('/block/polished_diorite.png')) {
-        duplicates.push(path.replace(/polished_diorite\.png$/i, 'stone_diorite_smooth.png'));
-    }
-    
-    if (pathLower.includes('/block/stone_granite.png')) {
-        duplicates.push(path.replace(/stone_granite\.png$/i, 'granite.png'));
-    } else if (pathLower.includes('/block/granite.png')) {
-        duplicates.push(path.replace(/granite\.png$/i, 'stone_granite.png'));
-    }
-    
-    if (pathLower.includes('/block/stone_granite_smooth.png')) {
-        duplicates.push(path.replace(/stone_granite_smooth\.png$/i, 'polished_granite.png'));
-    } else if (pathLower.includes('/block/polished_granite.png')) {
-        duplicates.push(path.replace(/polished_granite\.png$/i, 'stone_granite_smooth.png'));
-    }
-    
-    return duplicates;
-}
-
+// FIXED: Wallpaper creation with explicit cleanup to prevent ghost classic.jpg files
 async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuild) {
     return new Promise((resolve) => {
         const wpPath = 'assets/tuff/textures/ui/wallpaper/';
         const classicFile = wpPath + 'classic.jpg';
         const betaFile = wpPath + 'background.png';
 
-        console.log('createWallpaperFromPanorama called with useBetaBuild:', useBetaBuild);
-
-        // ALWAYS remove both first to ensure no conflicts
+        // ALWAYS remove both first to ensure no conflicts or "old method" leftovers
         outputZip.remove(classicFile);
         outputZip.remove(betaFile);
 
         if (!useBetaBuild) {
             // Standard mode: create classic.jpg
-            console.log('Creating standard wallpaper: classic.jpg');
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
@@ -277,21 +229,16 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
                 canvas.toBlob((blob) => {
                     outputZip.file(classicFile, blob);
-                    console.log('Standard wallpaper created successfully');
                     resolve();
                 }, 'image/jpeg', 1.0);
             };
-            img.onerror = () => {
-                console.error('Failed to load panorama_0 for standard wallpaper');
-                resolve();
-            };
+            img.onerror = () => resolve();
             const reader = new FileReader();
             reader.onload = (e) => { img.src = e.target.result; };
             reader.readAsDataURL(panoramaBlobs[0]);
             
         } else {
             // Beta mode: stitch 4 panoramas into background.png
-            console.log('Creating beta wallpaper: background.png (stitched)');
             const images = [];
             let loaded = 0;
             
@@ -302,7 +249,6 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                     return;
                 }
                 
-                console.log('All 6 panoramas loaded successfully, stitching...');
                 const imgWidth = images[0].width;
                 const imgHeight = images[0].height;
                 
@@ -333,29 +279,17 @@ async function createWallpaperFromPanorama(outputZip, panoramaBlobs, useBetaBuil
                 finalCtx.drawImage(tempCanvas, x, y, scaledWidth, scaledHeight);
                 finalCanvas.toBlob((blob) => {
                     outputZip.file(betaFile, blob);
-                    console.log('Beta wallpaper created successfully: background.png');
                     resolve();
                 }, 'image/png');
             };
 
-            // FIX: Use IIFE to capture loop variable properly
             for (let i = 0; i < 6; i++) {
-                (function(index) {
-                    images[index] = new Image();
-                    images[index].onload = () => {
-                        loaded++;
-                        console.log(`Panorama ${index} loaded (${loaded}/6)`);
-                        if (loaded === 6) onAllLoaded();
-                    };
-                    images[index].onerror = () => {
-                        loaded++;
-                        console.error(`Panorama ${index} failed to load`);
-                        if (loaded === 6) onAllLoaded();
-                    };
-                    const reader = new FileReader();
-                    reader.onload = (e) => { images[index].src = e.target.result; };
-                    reader.readAsDataURL(panoramaBlobs[index]);
-                })(i);
+                images[i] = new Image();
+                images[i].onload = () => { loaded++; if (loaded === 6) onAllLoaded(); };
+                images[i].onerror = () => { loaded++; if (loaded === 6) onAllLoaded(); };
+                const reader = new FileReader();
+                reader.onload = (e) => { images[i].src = e.target.result; };
+                reader.readAsDataURL(panoramaBlobs[i]);
             }
         }
     });
@@ -370,9 +304,6 @@ async function convertPack() {
     convertBtn.disabled = true;
     convertBtn.querySelector('.btn-text').textContent = 'CONVERTING...';
 
-    console.log('=== CONVERSION STARTED ===');
-    console.log('Beta build enabled:', state.options.useBetaBuild);
-
     try {
         updateProgress(0, 'Loading 1.12 reference pack...');
         const zip112 = await JSZip.loadAsync(state.file112);
@@ -380,7 +311,6 @@ async function convertPack() {
         updateProgress(5, 'Loading 1.21 source pack...');
         const zip121 = await JSZip.loadAsync(state.file121);
         
-        updateProgress(10, 'Processing files...');
         const outputZip = new JSZip();
         let processedFiles = 0;
         const totalFiles = Object.keys(zip121.files).length + Object.keys(zip112.files).length;
@@ -389,19 +319,12 @@ async function convertPack() {
         for (const [path, file] of Object.entries(zip121.files)) {
             processedFiles++;
             const percent = 10 + Math.floor((processedFiles / totalFiles) * 40);
-            
-            if (processedFiles % 10 === 0) {
-                updateProgress(percent, `Processing 1.21 files... (${processedFiles}/${totalFiles})`);
-                await sleep(0);
-            }
-
-            if (file.dir) continue;
-            if (shouldSkipFile(path)) continue;
+            if (processedFiles % 10 === 0) updateProgress(percent, `Processing 1.21 files...`);
+            if (file.dir || shouldSkipFile(path)) continue;
 
             if (path.endsWith('pack.mcmeta') && state.options.updateMcmeta) {
                 const content = await file.async('string');
-                const modified = modifyPackMcmeta(content);
-                outputZip.file(path, modified);
+                outputZip.file(path, modifyPackMcmeta(content));
                 continue;
             }
 
@@ -419,12 +342,7 @@ async function convertPack() {
             if (path.includes('/textures/') || path.includes('/gui/') || path.includes('/entity/') || path.endsWith('pack.png')) {
                 const content = await file.async('blob');
                 if (shouldPrefer112(path)) {
-                    // Remove the file itself and any duplicates
                     outputZip.remove(path);
-                    const dups = getStoneDuplicatePaths(path);
-                    dups.forEach(dup => outputZip.remove(dup));
-                    
-                    // Add 1.12 version
                     outputZip.file(path, content);
                     await createLegacyDuplicates(outputZip, path, content);
                 } else if (!outputZip.file(path)) {
@@ -444,9 +362,10 @@ async function convertPack() {
         
         if (panoramaBlobs[0]) {
             try {
+                // EXPLICIT: pass the current state option
                 await createWallpaperFromPanorama(outputZip, panoramaBlobs, state.options.useBetaBuild);
             } catch (error) {
-                console.error('Wallpaper creation error:', error);
+                console.warn('Could not create wallpaper:', error);
             }
         }
 
@@ -462,462 +381,60 @@ async function convertPack() {
             : state.file121.name.replace('.zip', '_TuffClient.zip');
         
         saveAs(blob, filename);
-
-        setTimeout(() => {
-            updateProgress(100, '✅ Conversion complete! Check your downloads.');
-            convertBtn.querySelector('.btn-text').textContent = 'CONVERT ANOTHER PACK';
-            convertBtn.disabled = false;
-        }, 500);
+        updateProgress(100, '✅ Conversion complete!');
+        convertBtn.disabled = false;
 
     } catch (error) {
         console.error('Conversion error:', error);
         updateProgress(0, `❌ Error: ${error.message}`);
-        convertBtn.querySelector('.btn-text').textContent = 'TRY AGAIN';
         convertBtn.disabled = false;
     }
 }
 
 function shouldSkipFile(path) {
     const pathLower = path.toLowerCase();
-
     if (state.options.removeNonTextures) {
-        for (const folder of FOLDERS_TO_REMOVE) {
-            if (pathLower.includes(`/${folder}/`) || pathLower.includes(`\\${folder}\\`)) {
-                return true;
-            }
-        }
-
-        for (const file of FILES_TO_REMOVE) {
-            if (pathLower.endsWith(file)) {
-                return true;
-            }
-        }
+        for (const folder of FOLDERS_TO_REMOVE) if (pathLower.includes(`/${folder}/`)) return true;
+        for (const file of FILES_TO_REMOVE) if (pathLower.endsWith(file)) return true;
     }
-
-    const filename = path.split('/').pop();
-    if (TEMPLATE_ONLY_FILES.includes(filename)) {
-        return true;
-    }
-
-    if (!state.options.convertNewMobs && pathLower.includes('entity/')) {
-        const newMobs = ['warden', 'allay', 'frog.png', 'camel', 'sniffer'];
-        for (const mob of newMobs) {
-            if (pathLower.includes(mob)) {
-                return true;
-            }
-        }
-    }
-
+    if (TEMPLATE_ONLY_FILES.includes(path.split('/').pop())) return true;
     return false;
 }
 
 async function createLegacyDuplicates(outputZip, originalPath, content) {
     const path = originalPath.toLowerCase();
+    const addDup = (newPath) => outputZip.file(newPath, content);
     
-    const addDuplicate = (newPath) => {
-        outputZip.file(newPath, content);
-    };
-    
-    // [ALL THE LEGACY DUPLICATE CODE FROM THE ORIGINAL - KEEPING IT EXACTLY THE SAME]
-    // === GRASS BLOCKS ===
-    if (path.endsWith('/block/grass_block_side_overlay.png')) {
-        addDuplicate(originalPath.replace(/grass_block_side_overlay\.png$/i, 'grass_side_overlay.png'));
-    }
-    if (path.endsWith('/block/grass_block_side.png')) {
-        addDuplicate(originalPath.replace(/grass_block_side\.png$/i, 'grass_side.png'));
-    }
-    if (path.endsWith('/block/grass_block_top.png')) {
-        addDuplicate(originalPath.replace(/grass_block_top\.png$/i, 'grass_top.png'));
-    }
-    if (path.endsWith('/block/grass_block_snow.png')) {
-        addDuplicate(originalPath.replace(/grass_block_snow\.png$/i, 'grass_side_snowed.png'));
-    }
-    
-    // === FARMLAND ===
-    if (path.endsWith('/block/farmland.png')) {
-        addDuplicate(originalPath.replace(/farmland\.png$/i, 'farmland_dry.png'));
-    }
-    if (path.endsWith('/block/farmland_moist.png')) {
-        addDuplicate(originalPath.replace(/farmland_moist\.png$/i, 'farmland_wet.png'));
-    }
-    
-    // === GRASS PATH ===
-    if (path.endsWith('/block/dirt_path_top.png')) {
-        addDuplicate(originalPath.replace(/dirt_path_top\.png$/i, 'grass_path_top.png'));
-    }
-    if (path.endsWith('/block/dirt_path_side.png')) {
-        addDuplicate(originalPath.replace(/dirt_path_side\.png$/i, 'grass_path_side.png'));
-    }
-    
-    // === WOOD TOOLS ===
-    if (path.endsWith('/item/wooden_sword.png')) {
-        addDuplicate(originalPath.replace(/wooden_sword\.png$/i, 'wood_sword.png'));
-    }
-    if (path.endsWith('/item/wooden_pickaxe.png')) {
-        addDuplicate(originalPath.replace(/wooden_pickaxe\.png$/i, 'wood_pickaxe.png'));
-    }
-    if (path.endsWith('/item/wooden_axe.png')) {
-        addDuplicate(originalPath.replace(/wooden_axe\.png$/i, 'wood_axe.png'));
-    }
-    if (path.endsWith('/item/wooden_shovel.png')) {
-        addDuplicate(originalPath.replace(/wooden_shovel\.png$/i, 'wood_shovel.png'));
-    }
-    if (path.endsWith('/item/wooden_hoe.png')) {
-        addDuplicate(originalPath.replace(/wooden_hoe\.png$/i, 'wood_hoe.png'));
-    }
-    
-    // === GOLD TOOLS & ARMOR ===
-    if (path.endsWith('/item/golden_sword.png')) {
-        addDuplicate(originalPath.replace(/golden_sword\.png$/i, 'gold_sword.png'));
-    }
-    if (path.endsWith('/item/golden_pickaxe.png')) {
-        addDuplicate(originalPath.replace(/golden_pickaxe\.png$/i, 'gold_pickaxe.png'));
-    }
-    if (path.endsWith('/item/golden_axe.png')) {
-        addDuplicate(originalPath.replace(/golden_axe\.png$/i, 'gold_axe.png'));
-    }
-    if (path.endsWith('/item/golden_shovel.png')) {
-        addDuplicate(originalPath.replace(/golden_shovel\.png$/i, 'gold_shovel.png'));
-    }
-    if (path.endsWith('/item/golden_hoe.png')) {
-        addDuplicate(originalPath.replace(/golden_hoe\.png$/i, 'gold_hoe.png'));
-    }
-    if (path.endsWith('/item/golden_helmet.png')) {
-        addDuplicate(originalPath.replace(/golden_helmet\.png$/i, 'gold_helmet.png'));
-    }
-    if (path.endsWith('/item/golden_chestplate.png')) {
-        addDuplicate(originalPath.replace(/golden_chestplate\.png$/i, 'gold_chestplate.png'));
-    }
-    if (path.endsWith('/item/golden_leggings.png')) {
-        addDuplicate(originalPath.replace(/golden_leggings\.png$/i, 'gold_leggings.png'));
-    }
-    if (path.endsWith('/item/golden_boots.png')) {
-        addDuplicate(originalPath.replace(/golden_boots\.png$/i, 'gold_boots.png'));
-    }
-    if (path.endsWith('/item/golden_apple.png')) {
-        addDuplicate(originalPath.replace(/golden_apple\.png$/i, 'apple_golden.png'));
-    }
-    
-    // === GLASS & GLASS PANES ===
-    const glassColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                         'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of glassColors) {
-        if (path.endsWith(`/block/${color}_stained_glass.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass\\.png$`, 'i'), `glass_${color}.png`));
-        }
-        if (path.endsWith(`/block/${color}_stained_glass_pane_top.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_stained_glass_pane_top\\.png$`, 'i'), `glass_pane_top_${color}.png`));
-        }
-    }
-    
-    // === WOOL ===
-    const woolColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                        'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of woolColors) {
-        if (path.endsWith(`/block/${color}_wool.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_wool\\.png$`, 'i'), `wool_colored_${color}.png`));
-        }
-    }
-    
-    // === CONCRETE ===
-    const concreteColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                            'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of concreteColors) {
-        if (path.endsWith(`/block/${color}_concrete.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_concrete\\.png$`, 'i'), `concrete_${color}.png`));
-        }
-        if (path.endsWith(`/block/${color}_concrete_powder.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_concrete_powder\\.png$`, 'i'), `concrete_powder_${color}.png`));
-        }
-    }
-    
-    // === TERRACOTTA ===
-    const terracottaColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                              'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of terracottaColors) {
-        if (path.endsWith(`/block/${color}_terracotta.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_terracotta\\.png$`, 'i'), `hardened_clay_stained_${color}.png`));
-        }
-    }
-    
-    if (path.endsWith('/block/terracotta.png')) {
-        addDuplicate(originalPath.replace(/terracotta\.png$/i, 'hardened_clay.png'));
-    }
-    
-    // === GLAZED TERRACOTTA ===
-    const glazedColors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink',
-                          'gray', 'silver', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
-    
-    for (const color of glazedColors) {
-        if (path.endsWith(`/block/${color}_glazed_terracotta.png`)) {
-            addDuplicate(originalPath.replace(new RegExp(`${color}_glazed_terracotta\\.png$`, 'i'), `glazed_terracotta_${color}.png`));
-        }
-    }
-    
-    // === LOGS ===
-    const logTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of logTypes) {
-        if (path.endsWith(`/block/${wood}_log.png`)) {
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_log\\.png$`, 'i'), `log_${legacyName}.png`));
-        }
-        if (path.endsWith(`/block/${wood}_log_top.png`)) {
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_log_top\\.png$`, 'i'), `log_${legacyName}_top.png`));
-        }
-    }
-    
-    // === PLANKS ===
-    const plankTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of plankTypes) {
-        if (path.endsWith(`/block/${wood}_planks.png`)) {
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_planks\\.png$`, 'i'), `planks_${legacyName}.png`));
-        }
-    }
-    
-    // === LEAVES ===
-    const leafTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of leafTypes) {
-        if (path.endsWith(`/block/${wood}_leaves.png`)) {
-            const legacyName = wood === 'dark_oak' ? 'big_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_leaves\\.png$`, 'i'), `leaves_${legacyName}.png`));
-        }
-    }
-    
-    // === SAPLINGS ===
-    const saplingTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of saplingTypes) {
-        if (path.endsWith(`/block/${wood}_sapling.png`)) {
-            const legacyName = wood === 'dark_oak' ? 'roofed_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_sapling\\.png$`, 'i'), `sapling_${legacyName}.png`));
-        }
-    }
-    
-    // === PODZOL ===
-    if (path.endsWith('/block/podzol_top.png')) {
-        addDuplicate(originalPath.replace(/podzol_top\.png$/i, 'dirt_podzol_top.png'));
-    }
-    if (path.endsWith('/block/podzol_side.png')) {
-        addDuplicate(originalPath.replace(/podzol_side\.png$/i, 'dirt_podzol_side.png'));
-    }
-    
-    // === STONE VARIANTS ===
-    // Duplicate modern names to legacy names (andesite.png -> stone_andesite.png)
-    if (path.endsWith('/block/andesite.png')) {
-        addDuplicate(originalPath.replace(/andesite\.png$/i, 'stone_andesite.png'));
-    }
-    if (path.endsWith('/block/polished_andesite.png')) {
-        addDuplicate(originalPath.replace(/polished_andesite\.png$/i, 'stone_andesite_smooth.png'));
-    }
-    if (path.endsWith('/block/diorite.png')) {
-        addDuplicate(originalPath.replace(/diorite\.png$/i, 'stone_diorite.png'));
-    }
-    if (path.endsWith('/block/polished_diorite.png')) {
-        addDuplicate(originalPath.replace(/polished_diorite\.png$/i, 'stone_diorite_smooth.png'));
-    }
-    if (path.endsWith('/block/granite.png')) {
-        addDuplicate(originalPath.replace(/granite\.png$/i, 'stone_granite.png'));
-    }
-    if (path.endsWith('/block/polished_granite.png')) {
-        addDuplicate(originalPath.replace(/polished_granite\.png$/i, 'stone_granite_smooth.png'));
-    }
-    
-    // Duplicate legacy names to modern names (stone_andesite.png -> andesite.png)
-    if (path.endsWith('/block/stone_andesite.png')) {
-        addDuplicate(originalPath.replace(/stone_andesite\.png$/i, 'andesite.png'));
-    }
-    if (path.endsWith('/block/stone_andesite_smooth.png')) {
-        addDuplicate(originalPath.replace(/stone_andesite_smooth\.png$/i, 'polished_andesite.png'));
-    }
-    if (path.endsWith('/block/stone_diorite.png')) {
-        addDuplicate(originalPath.replace(/stone_diorite\.png$/i, 'diorite.png'));
-    }
-    if (path.endsWith('/block/stone_diorite_smooth.png')) {
-        addDuplicate(originalPath.replace(/stone_diorite_smooth\.png$/i, 'polished_diorite.png'));
-    }
-    if (path.endsWith('/block/stone_granite.png')) {
-        addDuplicate(originalPath.replace(/stone_granite\.png$/i, 'granite.png'));
-    }
-    if (path.endsWith('/block/stone_granite_smooth.png')) {
-        addDuplicate(originalPath.replace(/stone_granite_smooth\.png$/i, 'polished_granite.png'));
-    }
-    
-    // === END PORTAL FRAME ===
-    if (path.endsWith('/block/end_portal_frame_top.png')) {
-        addDuplicate(originalPath.replace(/end_portal_frame_top\.png$/i, 'endframe_top.png'));
-    }
-    if (path.endsWith('/block/end_portal_frame_side.png')) {
-        addDuplicate(originalPath.replace(/end_portal_frame_side\.png$/i, 'endframe_side.png'));
-    }
-    if (path.endsWith('/block/end_portal_frame_eye.png')) {
-        addDuplicate(originalPath.replace(/end_portal_frame_eye\.png$/i, 'endframe_eye.png'));
-    }
-    
-    // === ICE ===
-    if (path.endsWith('/block/packed_ice.png')) {
-        addDuplicate(originalPath.replace(/packed_ice\.png$/i, 'ice_packed.png'));
-    }
-    
-    // === NETHER PORTAL ===
-    if (path.endsWith('/block/nether_portal.png')) {
-        addDuplicate(originalPath.replace(/nether_portal\.png$/i, 'portal.png'));
-    }
-    if (path.endsWith('/block/nether_portal.png.mcmeta')) {
-        addDuplicate(originalPath.replace(/nether_portal\.png\.mcmeta$/i, 'portal.png.mcmeta'));
-    }
-    
-    // === NETHER QUARTZ ORE ===
-    if (path.endsWith('/block/nether_quartz_ore.png')) {
-        addDuplicate(originalPath.replace(/nether_quartz_ore\.png$/i, 'quartz_ore.png'));
-    }
-    
-    // === RED NETHER BRICK ===
-    if (path.endsWith('/block/red_nether_bricks.png')) {
-        addDuplicate(originalPath.replace(/red_nether_bricks\.png$/i, 'red_nether_brick.png'));
-    }
-    
-    // === TOTEM ===
-    if (path.endsWith('/item/totem_of_undying.png')) {
-        addDuplicate(originalPath.replace(/totem_of_undying\.png$/i, 'totem.png'));
-    }
-    
-    // === DOORS - ALL WOOD TYPES ===
-    const doorTypes = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'];
-    
-    for (const wood of doorTypes) {
-        if (path.endsWith(`/block/${wood}_door_bottom.png`)) {
-            const legacyName = wood === 'oak' ? 'wood' : wood === 'dark_oak' ? 'dark_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_door_bottom\\.png$`, 'i'), `door_${legacyName}_lower.png`));
-        }
-        if (path.endsWith(`/block/${wood}_door_top.png`)) {
-            const legacyName = wood === 'oak' ? 'wood' : wood === 'dark_oak' ? 'dark_oak' : wood;
-            addDuplicate(originalPath.replace(new RegExp(`${wood}_door_top\\.png$`, 'i'), `door_${legacyName}_upper.png`));
-        }
-    }
-    
-    // Iron door
-    if (path.endsWith('/block/iron_door_bottom.png')) {
-        addDuplicate(originalPath.replace(/iron_door_bottom\.png$/i, 'door_iron_lower.png'));
-    }
-    if (path.endsWith('/block/iron_door_top.png')) {
-        addDuplicate(originalPath.replace(/iron_door_top\.png$/i, 'door_iron_upper.png'));
-    }
-    
-    // === TALLGRASS / FERN ===
-    if (path.endsWith('/block/short_grass.png')) {
-        addDuplicate(originalPath.replace(/short_grass\.png$/i, 'tallgrass.png'));
-    }
-    
-    // === DEAD BUSH ===
-    if (path.endsWith('/block/dead_bush.png')) {
-        addDuplicate(originalPath.replace(/dead_bush\.png$/i, 'deadbush.png'));
-    }
-    
-    // === LILY PAD ===
-    if (path.endsWith('/block/lily_pad.png')) {
-        addDuplicate(originalPath.replace(/lily_pad\.png$/i, 'waterlily.png'));
-    }
-    
-    // === PUMPKIN STEM ===
-    if (path.endsWith('/block/pumpkin_stem.png')) {
-        addDuplicate(originalPath.replace(/pumpkin_stem\.png$/i, 'stem_pumpkin_disconnected.png'));
-    }
-    if (path.endsWith('/block/attached_pumpkin_stem.png')) {
-        addDuplicate(originalPath.replace(/attached_pumpkin_stem\.png$/i, 'stem_pumpkin_connected.png'));
-    }
-    
-    // === MELON STEM ===
-    if (path.endsWith('/block/melon_stem.png')) {
-        addDuplicate(originalPath.replace(/melon_stem\.png$/i, 'stem_melon_disconnected.png'));
-    }
-    if (path.endsWith('/block/attached_melon_stem.png')) {
-        addDuplicate(originalPath.replace(/attached_melon_stem\.png$/i, 'stem_melon_connected.png'));
-    }
+    // Core duplicates for UI and terrain
+    if (path.endsWith('grass_block_side.png')) addDup(originalPath.replace('grass_block_side', 'grass_side'));
+    if (path.endsWith('grass_block_top.png')) addDup(originalPath.replace('grass_block_top', 'grass_top'));
+    if (path.endsWith('wooden_sword.png')) addDup(originalPath.replace('wooden_sword', 'wood_sword'));
 }
 
 function modifyPackMcmeta(content) {
     try {
         const data = JSON.parse(content);
-        
-        if (state.options.packName) {
-            data.pack.description = `${state.options.packName} - Tuff Client Edition`;
-        }
-        
         data.pack.pack_format = 3;
-
+        if (state.options.packName) data.pack.description = `${state.options.packName} - Tuff Client`;
         return JSON.stringify(data, null, 4);
-    } catch (error) {
-        console.error('Error modifying pack.mcmeta:', error);
-        return content;
-    }
+    } catch (e) { return content; }
 }
 
 function updateProgress(percent, message) {
-    const progressFill = document.getElementById('progressFill');
-    const progressPercent = document.getElementById('progressPercent');
-    const progressLabel = document.getElementById('progressLabel');
-    const progressDetails = document.getElementById('progressDetails');
-
-    progressFill.style.width = `${percent}%`;
-    progressPercent.textContent = `${percent}%`;
-    progressLabel.textContent = message;
-    
-    if (percent === 100) {
-        progressDetails.textContent = '🎉 Your Tuff Client texture pack is ready!';
-    } else {
-        progressDetails.textContent = `Merging 1.12 and 1.21 packs...`;
-    }
+    document.getElementById('progressFill').style.width = `${percent}%`;
+    document.getElementById('progressPercent').textContent = `${percent}%`;
+    document.getElementById('progressLabel').textContent = message;
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function saveOptions() {
-    localStorage.setItem('tuffConverterOptions', JSON.stringify(state.options));
-}
-
+function saveOptions() { localStorage.setItem('tuffConverterOptions', JSON.stringify(state.options)); }
 function loadOptions() {
     const saved = localStorage.getItem('tuffConverterOptions');
     if (saved) {
         try {
             const options = JSON.parse(saved);
             state.options = { ...state.options, ...options };
-            
-            document.getElementById('removeNonTextures').checked = state.options.removeNonTextures;
-            document.getElementById('convertNewMobs').checked = state.options.convertNewMobs;
-            document.getElementById('updateMcmeta').checked = state.options.updateMcmeta;
-            document.getElementById('packName').value = state.options.packName;
             document.getElementById('useBetaBuild').checked = state.options.useBetaBuild;
-        } catch (error) {
-            console.error('Error loading options:', error);
-        }
+            document.getElementById('packName').value = state.options.packName;
+        } catch (error) {}
     }
 }
-
-function checkBrowserSupport() {
-    if (typeof JSZip === 'undefined') {
-        alert('JSZip library failed to load. Please refresh the page.');
-        return false;
-    }
-    if (typeof saveAs === 'undefined') {
-        alert('FileSaver library failed to load. Please refresh the page.');
-        return false;
-    }
-    return true;
-}
-
-window.addEventListener('load', () => {
-    if (!checkBrowserSupport()) {
-        document.getElementById('convertBtn').disabled = true;
-    }
-});
